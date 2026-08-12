@@ -32,8 +32,10 @@ import { DocsLink, FlowPanel, Status } from './flow'
 import {
   FeaturedProviderRow,
   FireworksProviderRow,
+  NeuralDeepProviderRow,
   OpenRouterProviderRow,
   ProviderRow,
+  RouterAiProviderRow,
   sortProviders
 } from './providers'
 
@@ -41,8 +43,10 @@ export {
   FeaturedProviderRow,
   FireworksProviderRow,
   KeyProviderRow,
+  NeuralDeepProviderRow,
   OpenRouterProviderRow,
   ProviderRow,
+  RouterAiProviderRow,
   providerTitle,
   sortProviders
 } from './providers'
@@ -477,6 +481,11 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
   return (
     <div className="grid gap-2">
       <div className="grid max-h-[60dvh] gap-2 overflow-y-auto p-1">
+        {/* RU ecosystem providers — bundled in the RU edition DMG. Surface them
+            above Nous Portal so Russian users see local options first. Each row
+            opens the API-key form preselected to the provider's env var. */}
+        <RouterAiProviderRow onClick={() => openKeyForm('ROUTERAI_API_KEY')} />
+        <NeuralDeepProviderRow onClick={() => openKeyForm('NEURALDEEP_API_KEY')} />
         {featured ? <FeaturedProviderRow onSelect={select} provider={featured} /> : null}
         {showRest ? (
           <>

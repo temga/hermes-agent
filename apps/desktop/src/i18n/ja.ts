@@ -2162,6 +2162,8 @@ export const ja = defineLocale({
     featuredPitch: '1 つのサブスクリプションで 300 以上の最先端モデル — Hermes を実行するための推奨方法',
     fireworksPitch: '直接モデル API — Fireworks がホストする最先端モデル',
     openRouterPitch: '1 つのキーで数百のモデル — 堅実なデフォルト',
+    routerAiPitch: 'Russian OpenAI-compatible API aggregator — 300+ models',
+    neuralDeepPitch: 'Self-hosted AI hub on Russian GPUs — 152-FZ compliant',
     apiKeyOptions: {
       fireworks: {
         short: 'モデル API に直接接続',

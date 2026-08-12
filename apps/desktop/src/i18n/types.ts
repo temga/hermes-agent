@@ -1958,6 +1958,8 @@ export interface Translations {
     connected: string
     featuredPitch: string
     fireworksPitch: string
+    routerAiPitch: string
+    neuralDeepPitch: string
     openRouterPitch: string
     apiKeyOptions: Record<string, { short: string; description: string }>
     backToSignIn: string
