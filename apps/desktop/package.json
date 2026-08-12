@@ -209,9 +209,15 @@
         "to": "ru-plugins",
         "filter": [
           "**/*",
+          "!**/.git",
           "!**/.git/**",
+          "!**/.gitmodules",
+          "!**/.gitignore",
+          "!**/__pycache__",
           "!**/__pycache__/**",
-          "!**/*.pyc"
+          "!**/*.pyc",
+          "!**/*.egg-info",
+          "!**/*.egg-info/**"
         ]
       }
     ],
@@ -235,7 +241,7 @@
         "NSMicrophoneUsageDescription": "Hermes uses the microphone for voice input and voice conversations."
       },
       "gatekeeperAssess": false,
-      "hardenedRuntime": true,
+      "hardenedRuntime": false,
       "target": [
         "dmg",
         "zip"
