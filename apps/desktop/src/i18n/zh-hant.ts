@@ -2247,6 +2247,8 @@ export const zhHant = defineLocale({
     featuredPitch: '一個訂閱，300+ 前沿模型 — 執行 Hermes 的建議方式',
     fireworksPitch: '直接模型 API — Fireworks 託管的前沿模型',
     openRouterPitch: '一個金鑰，數百個模型 — 穩定的預設選擇',
+    routerAiPitch: 'Russian OpenAI-compatible API aggregator — 300+ models',
+    neuralDeepPitch: 'Self-hosted AI hub on Russian GPUs — 152-FZ compliant',
     apiKeyOptions: {
       fireworks: { short: '直接模型 API', description: '直接存取 Fireworks AI 託管的模型。' },
       openrouter: { short: '一個金鑰，多個模型', description: '用一個金鑰存取數百個模型。適合新安裝的預設選擇。' },

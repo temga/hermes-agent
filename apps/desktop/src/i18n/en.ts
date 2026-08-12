@@ -2656,6 +2656,8 @@ export const en: Translations = {
     featuredPitch: 'One subscription, 300+ frontier models — the recommended way to run Hermes',
     fireworksPitch: 'Direct model API — Fireworks-hosted frontier models',
     openRouterPitch: 'One key, hundreds of models — a solid default',
+    routerAiPitch: 'Russian OpenAI-compatible API aggregator — 300+ models, local payments',
+    neuralDeepPitch: 'Self-hosted AI hub on Russian GPUs (152-FZ compliant) — gpt-oss, qwen, gemma',
     apiKeyOptions: {
       fireworks: {
         short: 'direct model API',

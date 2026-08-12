@@ -101,6 +101,71 @@ export function OpenRouterProviderRow({ onClick }: { onClick: () => void }) {
   return <KeyProviderRow onClick={onClick} pitch={t.onboarding.openRouterPitch} title="OpenRouter" />
 }
 
+// --- RU ecosystem providers (featured rows for the RU edition build) ---
+// These are model-providers that ship bundled in the RU DMG. They use API keys
+// (not OAuth), so each row opens the key form preselected to the right env var.
+// Styled as featured (accent background) to surface them above Nous Portal.
+
+const RU_ROW_CLASS =
+  'group relative flex w-full items-center justify-between gap-4 rounded-[8px] bg-primary/[0.06] px-3 py-2.5 text-left transition-colors hover:bg-primary/10'
+
+export function RouterAiProviderRow({ onClick }: { onClick: () => void }) {
+  const { t } = useI18n()
+
+  return (
+    <RowButton className={RU_ROW_CLASS} onClick={onClick}>
+      <span aria-hidden className="arc-border arc-reverse arc-nous" />
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <RouterAiMark className="size-5 shrink-0" />
+          <span className="text-[length:var(--conversation-text-font-size)] font-semibold">RouterAI</span>
+        </div>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">{t.onboarding.routerAiPitch}</p>
+      </div>
+      <ChevronRight className="size-4 shrink-0 text-primary transition group-hover:translate-x-0.5" />
+    </RowButton>
+  )
+}
+
+export function NeuralDeepProviderRow({ onClick }: { onClick: () => void }) {
+  const { t } = useI18n()
+
+  return (
+    <RowButton className={RU_ROW_CLASS} onClick={onClick}>
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <NeuralDeepMark className="size-5 shrink-0" />
+          <span className="text-[length:var(--conversation-text-font-size)] font-semibold">NeuralDeep</span>
+        </div>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">{t.onboarding.neuralDeepPitch}</p>
+      </div>
+      <ChevronRight className="size-4 shrink-0 text-primary transition group-hover:translate-x-0.5" />
+    </RowButton>
+  )
+}
+
+// Compact inline SVG marks for the RU providers — avoids shipping asset files.
+function RouterAiMark({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <rect fill="#0EA5E9" height="24" rx="5" width="24" />
+      <path d="M7 16V8h2.5l2.5 4 2.5-4H17v8h-2v-4.5L12.5 15 10 11.5V16H7z" fill="white" />
+    </svg>
+  )
+}
+
+function NeuralDeepMark({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <rect fill="#7C3AED" height="24" rx="5" width="24" />
+      <circle cx="8" cy="12" fill="white" r="2" />
+      <circle cx="16" cy="8" fill="white" r="1.5" />
+      <circle cx="16" cy="16" fill="white" r="1.5" />
+      <path d="M8 12l8-4M8 12l8 4" stroke="white" strokeWidth="1.2" />
+    </svg>
+  )
+}
+
 export function ProviderRow({
   onSelect,
   provider

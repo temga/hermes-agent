@@ -2831,6 +2831,8 @@ export const zh: Translations = {
     featuredPitch: '一个订阅，300+ 前沿模型 — 运行 Hermes 的推荐方式',
     fireworksPitch: '直接模型 API — Fireworks 托管的前沿模型',
     openRouterPitch: '一个密钥，数百个模型 — 稳妥的默认选择',
+    routerAiPitch: 'Russian OpenAI-compatible API aggregator — 300+ models',
+    neuralDeepPitch: 'Self-hosted AI hub on Russian GPUs — 152-FZ compliant',
     apiKeyOptions: {
       fireworks: { short: '直接模型 API', description: '直接访问 Fireworks AI 托管的模型。' },
       openrouter: { short: '一个密钥，多个模型', description: '用一个密钥访问数百个模型。适合新安装的默认选择。' },

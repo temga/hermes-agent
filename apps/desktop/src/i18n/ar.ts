@@ -2069,6 +2069,8 @@ export const ar = defineLocale({
     featuredPitch: 'اشتراك واحد، أكثر من 300 نموذج متقدم — الطريقة الموصى بها لتشغيل Hermes',
     fireworksPitch: 'نماذج مفتوحة سريعة مع استضافة Fireworks.',
     openRouterPitch: 'مفتاح واحد لمئات النماذج — خيار افتراضي جيد',
+    routerAiPitch: 'Russian OpenAI-compatible API aggregator — 300+ models',
+    neuralDeepPitch: 'Self-hosted AI hub on Russian GPUs — 152-FZ compliant',
     apiKeyOptions: {
       openrouter: {
         short: 'مفتاح واحد، نماذج كثيرة',
