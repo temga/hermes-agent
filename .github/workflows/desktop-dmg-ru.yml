@@ -35,10 +35,14 @@ jobs:
         run: |
           node --version
           npm --version
-          if ! node -e "process.exit(require('semver').satisfies(process.version, '>=22.0.0') ? 0 : 1)" 2>/dev/null; then
-            echo "::error::Node >=22 required. Install from https://nodejs.org or via nvm: nvm install 22"
+          # Node 22+ is required (engines field in package.json).
+          # Extract major version and check >=22.
+          NODE_MAJOR=$(node -e "console.log(process.versions.node.split('.')[0])")
+          if [ "$NODE_MAJOR" -lt 22 ]; then
+            echo "::error::Node >=22 required (found $NODE_MAJOR). Install via nvm: nvm install 22"
             exit 1
           fi
+          echo "✓ Node $NODE_MAJOR OK"
 
       - name: Install root deps
         run: npm install --workspaces=false
