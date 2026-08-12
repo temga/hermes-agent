@@ -21,8 +21,8 @@ concurrency:
 jobs:
   build-mac:
     name: macOS DMG (RU plugins bundled)
-    runs-on: macos-latest
-    timeout-minutes: 45
+    runs-on: self-hosted
+    timeout-minutes: 60
 
     steps:
       - name: Checkout (with submodules)
@@ -31,12 +31,14 @@ jobs:
           ref: ${{ inputs.ref || github.ref }}
           submodules: recursive
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: apps/desktop/package-lock.json
+      - name: Verify Node version
+        run: |
+          node --version
+          npm --version
+          if ! node -e "process.exit(require('semver').satisfies(process.version, '>=22.0.0') ? 0 : 1)" 2>/dev/null; then
+            echo "::error::Node >=22 required. Install from https://nodejs.org or via nvm: nvm install 22"
+            exit 1
+          fi
 
       - name: Install root deps
         run: npm install --workspaces=false
