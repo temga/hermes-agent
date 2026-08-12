@@ -49,6 +49,7 @@ import { shouldLatchBackendStartFailure, shouldLatchRemoteReauthFailure } from '
 import { detectRemoteDisplay, isWindowsBinaryPathInWsl, isWslEnvironment } from './bootstrap-platform'
 import { decideBootstrapRepair } from './bootstrap-repair-guard'
 import { runBootstrap } from './bootstrap-runner'
+import { ensureRuPlugins } from './ru-plugins-bootstrap'
 import { applyConnectionChange, resolveTerminalConnection } from './connection-apply'
 import {
   authModeFromStatus,
@@ -4063,6 +4064,16 @@ async function ensureRuntime(backend) {
     running: true,
     error: null
   })
+
+  // Install bundled RU-ecosystem plugins (routerai, neuraldeep, max, etc.)
+  // into ~/.hermes/plugins/ + enable in config.yaml. Idempotent — a no-op
+  // once the stamp file exists. Non-fatal: a failure logs but never blocks
+  // startup. See electron/ru-plugins-bootstrap.ts for details.
+  try {
+    await ensureRuPlugins(HERMES_HOME, (msg) => rememberLog(`[ru-plugins] ${msg}`))
+  } catch (err) {
+    rememberLog(`[ru-plugins] unexpected error: ${(err as Error).message}`)
+  }
 
   return backend
 }
