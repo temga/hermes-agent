@@ -92,12 +92,16 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           TAG="${GITHUB_REF##*/}"
-          echo "Creating release $TAG with ${{ steps.find_dmg.outputs.dmg_path }}"
+          DMG="${{ steps.find_dmg.outputs.dmg_path }}"
+          echo "Uploading $DMG to release $TAG"
+          # Use gh CLI with the runner's auth token (has repo scope)
           gh release create "$TAG" \
             --repo temga/hermes-agent \
-            --title "Hermes Setup RU $TAG" \
-            --notes "RU edition Tauri installer. Downloads and installs Hermes Agent + RU plugins (RouterAI, NeuralDeep, MAX) on first launch." \
-            --draft \
-            "${{ steps.find_dmg.outputs.dmg_path }}#Hermes-Setup-RU.dmg"
+            --title "Hermes Setup RU $TAG (Tauri installer)" \
+            --notes "Tauri-based RU installer (~11MB). Downloads Hermes Agent + RU plugins on first launch." \
+            "$DMG#Hermes-Setup-RU.dmg" 2>&1 || {
+            echo "Release create failed, trying upload to existing..."
+            gh release upload "$TAG" "$DMG#Hermes-Setup-RU.dmg" --repo temga/hermes-agent 2>&1
+          }
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
