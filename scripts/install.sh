@@ -2065,20 +2065,24 @@ install_ru_plugins() {
         fi
     fi
 
-    # Copy ALL plugin directories (find plugin.yaml at any depth) into plugins_dir
+    # Copy ALL plugin directories preserving category structure
+    # (model-providers/, platforms/, backends/) so Hermes plugin scanner finds them
     local copied=0
     local plugin_name
     while IFS= read -r yaml_file; do
-        plugin_name=$(basename "$(dirname "$yaml_file")")
         local src_dir="$(dirname "$yaml_file")"
-        local dest="$plugins_dir/$plugin_name"
+        # Relative path from ru_clone_dir preserves category dirs
+        local rel="${src_dir#$ru_clone_dir/}"
+        local dest="$plugins_dir/$rel"
+        mkdir -p "$(dirname "$dest")"
         if [ -d "$dest" ]; then
             rm -rf "$dest"
         fi
         cp -r "$src_dir" "$dest"
         rm -rf "$dest/.git" "$dest/__pycache__" 2>/dev/null || true
+        plugin_name=$(basename "$src_dir")
         copied=$((copied + 1))
-        log_info "Installed plugin: $plugin_name"
+        log_info "Installed plugin: $plugin_name → plugins/$rel"
     done < <(find "$ru_clone_dir" -name "plugin.yaml" -o -name "plugin.yml" 2>/dev/null)
 
     # Enable plugins in config.yaml via Python (portable, no sed BSD/GNU issues)
