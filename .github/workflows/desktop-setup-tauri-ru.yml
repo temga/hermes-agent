@@ -1,6 +1,6 @@
 name: Build Hermes Setup (RU Tauri installer)
 
-"on":
+on:
   push:
     tags:
       - 'v*-ru-setup.*'
@@ -112,5 +112,3 @@ jobs:
             - Downloads `install.sh` from `temga/hermes-agent`
             - Runs stages: prerequisites → repository → venv → python-deps → node-deps → path → config → **ru-plugins** → setup → gateway → desktop → complete
             - `ru-plugins` stage: clones `temga/hermes-ru-ecosystem`, copies plugins to `~/.hermes/plugins/`
-          env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
