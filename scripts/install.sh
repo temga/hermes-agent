@@ -2012,14 +2012,21 @@ install_ru_plugins() {
     # Clone (or update) the RU ecosystem repo
     if [ -d "$ru_clone_dir/.git" ]; then
         log_info "Updating RU ecosystem cache..."
-        git -C "$ru_clone_dir" pull --ff-only --recurse-submodules 2>/dev/null || true
+        git -C "$ru_clone_dir" pull --ff-only 2>&1 || true
+        git -C "$ru_clone_dir" submodule update --init --recursive 2>&1 || true
     else
         log_info "Cloning RU ecosystem..."
         rm -rf "$ru_clone_dir"
-        if ! git clone --depth 1 --recurse-submodules "$ru_repo_url" "$ru_clone_dir" 2>/dev/null; then
+        if ! git clone --depth 1 "$ru_repo_url" "$ru_clone_dir" 2>&1; then
             log_error "Failed to clone RU ecosystem — plugins will not be available"
             log_info "You can install them manually later from $ru_repo_url"
             return 0  # non-fatal
+        fi
+        # Init submodules separately for better error visibility
+        if ! git -C "$ru_clone_dir" submodule update --init --recursive 2>&1; then
+            log_warn "Some submodules failed to init — trying individual clones"
+            # Fallback: init submodules one by one
+            git -C "$ru_clone_dir" submodule foreach --recursive 'git submodule update --init 2>&1 || true' || true
         fi
     fi
 
