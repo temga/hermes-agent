@@ -2058,62 +2058,52 @@ install_ru_plugins() {
         fi
     fi
 
-    # Copy plugin directories into ~/.hermes/plugins/
+    # Copy ALL plugin directories (find plugin.yaml at any depth) into plugins_dir
     local copied=0
     local plugin_name
-    for plugin_dir in "$ru_clone_dir"/*/; do
-        plugin_name=$(basename "$plugin_dir")
-        # Skip non-plugin files (README, .git, etc.)
-        [ -f "$plugin_dir/plugin.yaml" ] || [ -f "$plugin_dir/plugin.yml" ] || continue
-
+    while IFS= read -r yaml_file; do
+        plugin_name=$(basename "$(dirname "$yaml_file")")
+        local src_dir="$(dirname "$yaml_file")"
         local dest="$plugins_dir/$plugin_name"
         if [ -d "$dest" ]; then
-            log_info "Plugin $plugin_name already present, updating..."
             rm -rf "$dest"
         fi
-        cp -r "$plugin_dir" "$dest"
-        # Clean up .git artifacts
+        cp -r "$src_dir" "$dest"
         rm -rf "$dest/.git" "$dest/__pycache__" 2>/dev/null || true
         copied=$((copied + 1))
-    done
+        log_info "Installed plugin: $plugin_name"
+    done < <(find "$ru_clone_dir" -name "plugin.yaml" -o -name "plugin.yml" 2>/dev/null)
 
-    # Also handle nested category dirs (model-providers/, backends/, platforms/)
-    for category_dir in "$ru_clone_dir"/*/; do
-        [ -d "$category_dir" ] || continue
-        # If this dir contains subdirs with plugin.yaml, it's a category
-        for sub_dir in "$category_dir"*/; do
-            [ -f "$sub_dir/plugin.yaml" ] || [ -f "$sub_dir/plugin.yml" ] || continue
-            plugin_name=$(basename "$sub_dir")
-            local dest="$plugins_dir/$plugin_name"
-            if [ -d "$dest" ]; then
-                rm -rf "$dest"
-            fi
-            cp -r "$sub_dir" "$dest"
-            rm -rf "$dest/.git" "$dest/__pycache__" 2>/dev/null || true
-            copied=$((copied + 1))
-        done
-    done
-
-    # Enable plugins in config.yaml (text-based merge — no yaml parser needed)
+    # Enable plugins in config.yaml via Python (portable, no sed BSD/GNU issues)
     local config_file="$HERMES_HOME/config.yaml"
-    if [ -f "$config_file" ]; then
-        # Check if plugins section exists
-        if ! grep -q "^plugins:" "$config_file" 2>/dev/null; then
-            printf '\nplugins:\n  enabled: []\n' >> "$config_file"
-        fi
-        # Add each RU plugin to the enabled list if not already there
+    if [ -f "$config_file" ] && [ "$copied" -gt 0 ]; then
         local ru_plugins="routerai neuraldeep max routerai-imagegen neuraldeep-search"
-        for p in $ru_plugins; do
-            if ! grep -q "  - $p$" "$config_file" 2>/dev/null; then
-                # Replace 'enabled: []' with 'enabled:' + list, or append to list
-                if grep -q "enabled: \[\]" "$config_file" 2>/dev/null; then
-                    sed -i.bak "s/enabled: \[\]/enabled:\n  - $p/" "$config_file"
-                else
-                    sed -i.bak "/^  enabled:/a\\  - $p" "$config_file"
-                fi
-                rm -f "$config_file.bak"
-            fi
-        done
+        "$INSTALL_DIR/venv/bin/python" - "$config_file" "$ru_plugins" <<'PYEOF'
+import sys, re
+path, plugins_str = sys.argv[1], sys.argv[2].split()
+with open(path, 'r') as f:
+    content = f.read()
+
+# Ensure plugins section exists
+if not re.search(r'^plugins:\s*$', content, re.MULTILINE):
+    content = content.rstrip() + '\n\nplugins:\n  enabled: []\n'
+
+# Find enabled list and add missing plugins
+for p in plugins_str:
+    pattern = r'^  - ' + re.escape(p) + r'\s*$'
+    if not re.search(pattern, content, re.MULTILINE):
+        # Replace 'enabled: []' → 'enabled:\n  - p'
+        if re.search(r'enabled:\s*\[\]', content):
+            content = re.sub(r'enabled:\s*\[\]', 'enabled:', content, count=1)
+            content = content.replace('  enabled:', '  enabled:\n  - ' + p, 1)
+        else:
+            # Append after 'enabled:' line
+            content = re.sub(r'^(  enabled:)\s*$', r'\1\n  - ' + p, content, count=1, flags=re.MULTILINE)
+
+with open(path, 'w') as f:
+    f.write(content)
+print(f"Enabled RU plugins: {', '.join(plugins_str)}")
+PYEOF
     fi
 
     # Write stamp
