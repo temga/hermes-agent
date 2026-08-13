@@ -62,9 +62,11 @@ jobs:
       - name: Build Tauri DMG
         run: |
           cd apps/bootstrap-installer
-          # Pin to current branch (main) so the installer downloads install.sh
-          # from temga/hermes-agent main branch
-          export HERMES_BUILD_PIN_BRANCH="main"
+          # Pin to the EXACT commit SHA — immutable URL avoids GitHub raw cache staleness.
+          # raw.githubusercontent.com/temga/hermes-agent/<SHA>/scripts/install.sh
+          # is cached forever (immutable), unlike /main/ which can lag.
+          export HERMES_BUILD_PIN_COMMIT="$GITHUB_SHA"
+          echo "Pinning installer to commit $HERMES_BUILD_PIN_COMMIT"
           npm run tauri:build
         env:
           # Tauri needs to know the app is not in dev mode
