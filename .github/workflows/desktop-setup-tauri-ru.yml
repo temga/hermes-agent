@@ -18,8 +18,21 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
+      - name: Install Rust toolchain (if missing)
+        run: |
+          if ! command -v rustc &>/dev/null; then
+            echo "Rust not found — installing via rustup..."
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+            source "$HOME/.cargo/env"
+            # Add to PATH for subsequent steps
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          else
+            echo "Rust already installed: $(rustc --version)"
+          fi
+
       - name: Verify Rust toolchain
         run: |
+          source "$HOME/.cargo/env" 2>/dev/null || true
           rustc --version
           cargo --version
           echo "Rust toolchain OK"
