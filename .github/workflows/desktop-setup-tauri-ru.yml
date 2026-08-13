@@ -1,6 +1,6 @@
 name: Build Hermes Setup (RU Tauri installer)
 
-on:
+"on":
   push:
     tags:
       - 'v*-ru-setup.*'
