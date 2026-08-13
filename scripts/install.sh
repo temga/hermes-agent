@@ -43,8 +43,8 @@ NC='\033[0m' # No Color
 BOLD='\033[1m'
 
 # Configuration
-REPO_URL_SSH="git@github.com:NousResearch/hermes-agent.git"
-REPO_URL_HTTPS="https://github.com/NousResearch/hermes-agent.git"
+REPO_URL_SSH="git@github.com:temga/hermes-agent.git"
+REPO_URL_HTTPS="https://github.com/temga/hermes-agent.git"
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 # INSTALL_DIR is resolved AFTER arg parsing and OS detection so we can pick an
 # FHS-style layout for root installs.  Track whether the user gave us an
@@ -322,7 +322,7 @@ emit_manifest() {
     if [ "$INCLUDE_DESKTOP" = true ]; then
         desktop_stage='{"name":"desktop","title":"Build desktop app","category":"runtime","needs_user_input":false},'
     fi
-    printf '%s' '{"protocol_version":1,"stages":[{"name":"prerequisites","title":"System prerequisites","category":"runtime","needs_user_input":false},{"name":"repository","title":"Download Hermes Agent","category":"runtime","needs_user_input":false},{"name":"venv","title":"Create Python virtual environment","category":"runtime","needs_user_input":false},{"name":"python-deps","title":"Install Python dependencies","category":"runtime","needs_user_input":false},{"name":"node-deps","title":"Install browser-tool dependencies","category":"runtime","needs_user_input":false},{"name":"path","title":"Install hermes command","category":"runtime","needs_user_input":false},{"name":"config","title":"Prepare config and skills","category":"configuration","needs_user_input":false},{"name":"setup","title":"Configure API keys and settings","category":"configuration","needs_user_input":true},{"name":"gateway","title":"Configure gateway service","category":"configuration","needs_user_input":true},'"$desktop_stage"'{"name":"complete","title":"Finish install","category":"runtime","needs_user_input":false}]}'
+    printf '%s' '{"protocol_version":1,"stages":[{"name":"prerequisites","title":"System prerequisites","category":"runtime","needs_user_input":false},{"name":"repository","title":"Download Hermes Agent","category":"runtime","needs_user_input":false},{"name":"venv","title":"Create Python virtual environment","category":"runtime","needs_user_input":false},{"name":"python-deps","title":"Install Python dependencies","category":"runtime","needs_user_input":false},{"name":"node-deps","title":"Install browser-tool dependencies","category":"runtime","needs_user_input":false},{"name":"path","title":"Install hermes command","category":"runtime","needs_user_input":false},{"name":"config","title":"Prepare config and skills","category":"configuration","needs_user_input":false},{"name":"ru-plugins","title":"Install RU ecosystem plugins","category":"configuration","needs_user_input":false},{"name":"setup","title":"Configure API keys and settings","category":"configuration","needs_user_input":true},{"name":"gateway","title":"Configure gateway service","category":"configuration","needs_user_input":true},'"$desktop_stage"'{"name":"complete","title":"Finish install","category":"runtime","needs_user_input":false}]}'
     printf '\n'
 }
 
@@ -1990,6 +1990,103 @@ SOUL_EOF
     fi
 }
 
+# RU-EDITION: install Russian ecosystem plugins (RouterAI, NeuralDeep, MAX, etc.)
+# Clones temga/hermes-ru-ecosystem and copies plugin directories into
+# ~/.hermes/plugins/, then enables them in config.yaml.
+install_ru_plugins() {
+    local plugins_dir="$HERMES_HOME/plugins"
+    local ru_repo_url="https://github.com/temga/hermes-ru-ecosystem.git"
+    local ru_clone_dir="$HERMES_HOME/.ru-ecosystem-cache"
+    local ru_stamp="$plugins_dir/.ru-plugins-stamp"
+
+    log_info "Installing Russian ecosystem plugins..."
+
+    # Idempotency: skip if already installed and stamp is fresh
+    if [ -f "$ru_stamp" ] && [ -d "$plugins_dir" ]; then
+        log_info "RU plugins already installed (stamp found), skipping"
+        return 0
+    fi
+
+    mkdir -p "$plugins_dir"
+
+    # Clone (or update) the RU ecosystem repo
+    if [ -d "$ru_clone_dir/.git" ]; then
+        log_info "Updating RU ecosystem cache..."
+        git -C "$ru_clone_dir" pull --ff-only 2>/dev/null || true
+    else
+        log_info "Cloning RU ecosystem..."
+        rm -rf "$ru_clone_dir"
+        if ! git clone --depth 1 "$ru_repo_url" "$ru_clone_dir" 2>/dev/null; then
+            log_error "Failed to clone RU ecosystem — plugins will not be available"
+            log_info "You can install them manually later from $ru_repo_url"
+            return 0  # non-fatal
+        fi
+    fi
+
+    # Copy plugin directories into ~/.hermes/plugins/
+    local copied=0
+    local plugin_name
+    for plugin_dir in "$ru_clone_dir"/*/; do
+        plugin_name=$(basename "$plugin_dir")
+        # Skip non-plugin files (README, .git, etc.)
+        [ -f "$plugin_dir/plugin.yaml" ] || [ -f "$plugin_dir/plugin.yml" ] || continue
+
+        local dest="$plugins_dir/$plugin_name"
+        if [ -d "$dest" ]; then
+            log_info "Plugin $plugin_name already present, updating..."
+            rm -rf "$dest"
+        fi
+        cp -r "$plugin_dir" "$dest"
+        # Clean up .git artifacts
+        rm -rf "$dest/.git" "$dest/__pycache__" 2>/dev/null || true
+        copied=$((copied + 1))
+    done
+
+    # Also handle nested category dirs (model-providers/, backends/, platforms/)
+    for category_dir in "$ru_clone_dir"/*/; do
+        [ -d "$category_dir" ] || continue
+        # If this dir contains subdirs with plugin.yaml, it's a category
+        for sub_dir in "$category_dir"*/; do
+            [ -f "$sub_dir/plugin.yaml" ] || [ -f "$sub_dir/plugin.yml" ] || continue
+            plugin_name=$(basename "$sub_dir")
+            local dest="$plugins_dir/$plugin_name"
+            if [ -d "$dest" ]; then
+                rm -rf "$dest"
+            fi
+            cp -r "$sub_dir" "$dest"
+            rm -rf "$dest/.git" "$dest/__pycache__" 2>/dev/null || true
+            copied=$((copied + 1))
+        done
+    done
+
+    # Enable plugins in config.yaml (text-based merge — no yaml parser needed)
+    local config_file="$HERMES_HOME/config.yaml"
+    if [ -f "$config_file" ]; then
+        # Check if plugins section exists
+        if ! grep -q "^plugins:" "$config_file" 2>/dev/null; then
+            printf '\nplugins:\n  enabled: []\n' >> "$config_file"
+        fi
+        # Add each RU plugin to the enabled list if not already there
+        local ru_plugins="routerai neuraldeep max routerai-imagegen neuraldeep-search"
+        for p in $ru_plugins; do
+            if ! grep -q "  - $p$" "$config_file" 2>/dev/null; then
+                # Replace 'enabled: []' with 'enabled:' + list, or append to list
+                if grep -q "enabled: \[\]" "$config_file" 2>/dev/null; then
+                    sed -i.bak "s/enabled: \[\]/enabled:\n  - $p/" "$config_file"
+                else
+                    sed -i.bak "/^  enabled:/a\\  - $p" "$config_file"
+                fi
+                rm -f "$config_file.bak"
+            fi
+        done
+    fi
+
+    # Write stamp
+    printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$ru_stamp"
+
+    log_success "Installed $copied RU plugins to ~/.hermes/plugins/"
+}
+
 find_system_browser() {
     # Honor ONLY an explicit, user-set AGENT_BROWSER_EXECUTABLE_PATH override.
     #
@@ -3271,6 +3368,11 @@ run_stage_body() {
             require_install_dir
             copy_config_templates
             ;;
+        ru-plugins)
+            detect_os
+            resolve_install_layout
+            install_ru_plugins
+            ;;
         setup)
             detect_os
             resolve_install_layout
@@ -3376,6 +3478,7 @@ main() {
     install_browser_use_cli
     setup_path
     copy_config_templates
+    install_ru_plugins
     run_setup_wizard
     maybe_start_gateway
 
