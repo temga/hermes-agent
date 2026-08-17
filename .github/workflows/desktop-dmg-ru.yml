@@ -32,6 +32,9 @@ jobs:
           REF_NAME="${REF#refs/heads/}"
           REF_NAME="${REF_NAME#refs/tags/}"
           echo "Cloning ref: $REF_NAME"
+          # Self-hosted runner workspace may have leftovers from previous runs.
+          # Clean everything (including dotfiles) before cloning into ".".
+          find . -mindepth 1 -delete 2>/dev/null || true
           git clone --depth 1 --branch "$REF_NAME" "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" .
           git submodule update --init --recursive --depth 1
 
