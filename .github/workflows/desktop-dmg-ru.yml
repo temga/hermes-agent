@@ -59,22 +59,55 @@ jobs:
           echo "✓ RU plugins present:"
           find apps/desktop/resources/ru-plugins -name plugin.yaml -maxdepth 3 | sort
 
-      - name: Build desktop app (DMG)
+      - name: Build desktop app (DMG + adhoc zip)
         working-directory: apps/desktop
         run: npm run dist:mac:dmg
         env:
-          # Skip code signing + notarization for community builds.
-          # Users get an unsigned DMG — macOS Gatekeeper will warn on first
-          # launch ("Hermes can't be opened because it is from an
-          # unidentified developer"). Right-click → Open bypasses it.
-          # For signed builds, set CSC_LINK, CSC_KEY_PASSWORD, and Apple
-          # notarization credentials (APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD,
-          # APPLE_TEAM_ID) as repository secrets.
+          # Build unsigned from electron-builder (CSC_IDENTITY_AUTO_DISCOVERY=false).
+          # Adhoc signing is done explicitly in the next step with codesign --sign -.
+          # This matches Xcode's "Signing Certificate: Sign to Run Locally".
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-          # electron-builder reads these; empty/false skips notarize.mjs.
-          APPLE_ID: ''
-          APPLE_APP_SPECIFIC_PASSWORD: ''
-          APPLE_TEAM_ID: ''
+          # No notarization credentials → notarize.mjs skips gracefully.
+          APPLE_NOTARY_PROFILE: ''
+          APPLE_API_KEY: ''
+          APPLE_API_KEY_ID: ''
+          APPLE_API_ISSUER: ''
+
+      - name: Adhoc-sign .app, archive zip, verify
+        working-directory: apps/desktop
+        run: |
+          set -euo pipefail
+          # Find the .app produced by electron-builder (inside mac-arm64 or mac dir).
+          APP=$(find release -name "Hermes.app" -type d | head -1)
+          if [ -z "$APP" ]; then
+            echo "::error::Hermes.app not found in release/"
+            ls -la release/
+            exit 1
+          fi
+          echo "Found app bundle: $APP"
+
+          # Re-sign adhoc with hardened runtime + entitlements (idempotent).
+          # electron-builder may have signed with "-" already, but we re-sign
+          # explicitly to guarantee the signature is fresh and deep.
+          codesign --force --deep --sign - \
+            --entitlements electron/entitlements.mac.plist \
+            --options runtime \
+            "$APP"
+
+          # Archive with ditto (preserves bundle structure + resource fork).
+          APP_DIR=$(dirname "$APP")
+          ditto -c -k --keepParent "$APP" "$APP_DIR/Hermes.zip"
+          echo "Archived to: $APP_DIR/Hermes.zip"
+
+          # Verify signature is adhoc.
+          echo "=== codesign --verify --deep --strict ==="
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          echo
+          echo "=== codesign -dv (signature details) ==="
+          codesign -dv --verbose=4 "$APP"
+          echo
+          echo "=== spctl assessment (should FAIL — adhoc, not notarized) ==="
+          spctl --assess --verbose=4 "$APP" 2>&1 || true
 
       - name: Upload DMG artifact (best-effort)
         continue-on-error: true
@@ -84,11 +117,21 @@ jobs:
           path: apps/desktop/release/*.dmg
           if-no-files-found: warn
 
+      - name: Upload adhoc-signed zip artifact
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hermes-RU-macOS-adhoc-zip
+          path: apps/desktop/release/**/Hermes.zip
+          if-no-files-found: warn
+
       - name: Release (on tag push)
         if: startsWith(github.ref, 'refs/tags/v') && always()
         uses: softprops/action-gh-release@v2
         with:
-          files: apps/desktop/release/*.dmg
+          files: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/**/Hermes.zip
           draft: true
           name: ${{ github.ref_name }}
           body: |
@@ -100,10 +143,16 @@ jobs:
             - MAX Messenger (platform)
 
             ### Install
-            1. Download the `.dmg`
+            1. Download the `.dmg` or `Hermes.zip`
             2. Open it, drag **Hermes** to Applications
-            3. Right-click → Open (Gatekeeper warning — unsigned build)
+            3. Right-click → Open (adhoc-signed, not notarized — Gatekeeper
+               will prompt once, then allow)
             4. First launch installs Hermes Agent + copies RU plugins automatically
+
+            ### Signature
+            - **Adhoc** ("Sign to Run Locally", identity `-`)
+            - Not notarized — for local development/testing only
+            - Verify: `codesign -dv --verbose=4 Hermes.app` → shows `adhoc`
 
             ### Requirements
             - macOS 12+
