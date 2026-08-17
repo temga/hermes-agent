@@ -25,11 +25,16 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      - name: Checkout (with submodules)
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref || github.ref }}
-          submodules: recursive
+      - name: Checkout (manual clone — bypasses actions/checkout 429 rate limit)
+        run: |
+          set -euo pipefail
+          REF="${{ inputs.ref || github.ref }}"
+          # Strip refs/heads/ or refs/tags/ prefix for clone depth.
+          REF_NAME="${REF#refs/heads/}"
+          REF_NAME="${REF_NAME#refs/tags/}"
+          echo "Cloning ref: $REF_NAME"
+          git clone --depth 1 --branch "$REF_NAME" "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" .
+          git submodule update --init --recursive --depth 1
 
       - name: Verify Node version
         run: |
