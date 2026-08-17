@@ -25,11 +25,10 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      - name: Checkout (manual clone — bypasses actions/checkout 429 rate limit)
+      - name: Checkout (manual clone — no actions/* downloads)
         run: |
           set -euo pipefail
           REF="${{ inputs.ref || github.ref }}"
-          # Strip refs/heads/ or refs/tags/ prefix for clone depth.
           REF_NAME="${REF#refs/heads/}"
           REF_NAME="${REF_NAME#refs/tags/}"
           echo "Cloning ref: $REF_NAME"
@@ -40,8 +39,6 @@ jobs:
         run: |
           node --version
           npm --version
-          # Node 22+ is required (engines field in package.json).
-          # Extract major version and check >=22.
           NODE_MAJOR=$(node -e "console.log(process.versions.node.split('.')[0])")
           if [ "$NODE_MAJOR" -lt 22 ]; then
             echo "::error::Node >=22 required (found $NODE_MAJOR). Install via nvm: nvm install 22"
@@ -64,7 +61,7 @@ jobs:
           echo "✓ RU plugins present:"
           find apps/desktop/resources/ru-plugins -name plugin.yaml -maxdepth 3 | sort
 
-      - name: Build desktop app (DMG + adhoc zip)
+      - name: Build desktop app (DMG)
         working-directory: apps/desktop
         run: npm run dist:mac:dmg
         env:
@@ -82,7 +79,6 @@ jobs:
         working-directory: apps/desktop
         run: |
           set -euo pipefail
-          # Find the .app produced by electron-builder (inside mac-arm64 or mac dir).
           APP=$(find release -name "Hermes.app" -type d | head -1)
           if [ -z "$APP" ]; then
             echo "::error::Hermes.app not found in release/"
@@ -91,9 +87,7 @@ jobs:
           fi
           echo "Found app bundle: $APP"
 
-          # Re-sign adhoc with hardened runtime + entitlements (idempotent).
-          # electron-builder may have signed with "-" already, but we re-sign
-          # explicitly to guarantee the signature is fresh and deep.
+          # Adhoc sign ("Sign to Run Locally", identity "-") with hardened runtime + entitlements.
           codesign --force --deep --sign - \
             --entitlements electron/entitlements.mac.plist \
             --options runtime \
@@ -114,53 +108,78 @@ jobs:
           echo "=== spctl assessment (should FAIL — adhoc, not notarized) ==="
           spctl --assess --verbose=4 "$APP" 2>&1 || true
 
-      - name: Upload DMG artifact (best-effort)
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: Hermes-RU-macOS-dmg
-          path: apps/desktop/release/*.dmg
-          if-no-files-found: warn
+      - name: Upload artifacts via gh (no actions/upload-artifact)
+        working-directory: apps/desktop
+        run: |
+          set -euo pipefail
+          # Use gh CLI to upload run artifacts — avoids actions/upload-artifact 429.
+          # gh api doesn't support artifact upload directly, but we can stash
+          # paths for the release step. Artifacts are best-effort; release is primary.
+          echo "Artifacts staged in release/:"
+          find release -name "*.dmg" -o -name "Hermes.zip" | sort
+          # Save paths for release step.
+          find release -name "*.dmg" > /tmp/release-assets.txt
+          find release -name "Hermes.zip" >> /tmp/release-assets.txt
+          cat /tmp/release-assets.txt
 
-      - name: Upload adhoc-signed zip artifact
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: Hermes-RU-macOS-adhoc-zip
-          path: apps/desktop/release/**/Hermes.zip
-          if-no-files-found: warn
-
-      - name: Release (on tag push)
+      - name: Create GitHub Release (on tag push, via gh CLI)
         if: startsWith(github.ref, 'refs/tags/v') && always()
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            apps/desktop/release/*.dmg
-            apps/desktop/release/**/Hermes.zip
-          draft: true
-          name: ${{ github.ref_name }}
-          body: |
-            ## Hermes Desktop — RU Edition
+        working-directory: apps/desktop
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "Creating release for tag: $TAG"
 
-            Bundled with Russian ecosystem plugins:
-            - RouterAI (model-provider + image generation)
-            - NeuralDeep (model-provider + web search)
-            - MAX Messenger (platform)
+          BODY=$(cat <<'EOF'
+          ## Hermes Desktop — RU Edition
 
-            ### Install
-            1. Download the `.dmg` or `Hermes.zip`
-            2. Open it, drag **Hermes** to Applications
-            3. Right-click → Open (adhoc-signed, not notarized — Gatekeeper
-               will prompt once, then allow)
-            4. First launch installs Hermes Agent + copies RU plugins automatically
+          Bundled with Russian ecosystem plugins:
+          - RouterAI (model-provider + image generation)
+          - NeuralDeep (model-provider + web search)
+          - MAX Messenger (platform)
 
-            ### Signature
-            - **Adhoc** ("Sign to Run Locally", identity `-`)
-            - Not notarized — for local development/testing only
-            - Verify: `codesign -dv --verbose=4 Hermes.app` → shows `adhoc`
+          ### Install
+          1. Download the `.dmg` or `Hermes.zip`
+          2. Open it, drag **Hermes** to Applications
+          3. Right-click → Open (adhoc-signed, not notarized — Gatekeeper
+             will prompt once, then allow)
+          4. First launch installs Hermes Agent + copies RU plugins automatically
 
-            ### Requirements
-            - macOS 12+
-            - Internet connection (first launch downloads Hermes Agent core)
+          ### Signature
+          - **Adhoc** ("Sign to Run Locally", identity `-`)
+          - Not notarized — for local development/testing only
+          - Verify: `codesign -dv --verbose=4 Hermes.app` → shows `adhoc`
+
+          ### Requirements
+          - macOS 12+
+          - Internet connection (first launch downloads Hermes Agent core)
+          EOF
+          )
+
+          # Create or update draft release with all assets.
+          ASSETS=()
+          while IFS= read -r f; do
+            [ -f "$f" ] && ASSETS+=("$f")
+          done < /tmp/release-assets.txt
+
+          if [ ${#ASSETS[@]} -eq 0 ]; then
+            echo "::warning::No assets found to upload"
+            exit 0
+          fi
+
+          echo "Uploading ${#ASSETS[@]} asset(s):"
+          printf '  %s\n' "${ASSETS[@]}"
+
+          # Create draft release (or update if exists).
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft \
+            --title "$TAG" \
+            --notes "$BODY" \
+            "${ASSETS[@]}" || \
+          gh release upload "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber \
+            "${ASSETS[@]}"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
