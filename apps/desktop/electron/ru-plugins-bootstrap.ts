@@ -42,7 +42,14 @@
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { app } from 'electron'
+
+// ESM-safe __dirname. In CommonJS this is provided for free; under
+// `"type": "module"` (package.json) + electron-vite bundling it is not,
+// and referencing the bare global throws ReferenceError before any
+// fallback path can run. Derive it from import.meta.url instead.
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 /** A plugin entry in the bundled ru-plugins directory. */
 interface RuPluginEntry {
