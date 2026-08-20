@@ -111,18 +111,40 @@ jobs:
           echo "=== spctl assessment (should FAIL — adhoc, not notarized) ==="
           spctl --assess --verbose=4 "$APP" 2>&1 || true
 
-      - name: Upload artifacts via gh (no actions/upload-artifact)
+      - name: Build styled installer DMG (custom icon + background)
         working-directory: apps/desktop
         run: |
           set -euo pipefail
-          # Use gh CLI to upload run artifacts — avoids actions/upload-artifact 429.
-          # gh api doesn't support artifact upload directly, but we can stash
-          # paths for the release step. Artifacts are best-effort; release is primary.
+          # Find the Hermes.zip produced by the adhoc-sign step.
+          SOURCE_ZIP=$(find release -name "Hermes.zip" | head -1)
+          if [ -z "$SOURCE_ZIP" ]; then
+            echo "::error::Hermes.zip not found — adhoc-sign step may have failed"
+            exit 1
+          fi
+          echo "Source zip: $SOURCE_ZIP"
+
+          # Run Marian's installer builder with CI paths.
+          chmod +x installer-assets/build-installer.sh
+          bash installer-assets/build-installer.sh \
+            "$SOURCE_ZIP" \
+            "release/Hermes-Installer.dmg" \
+            "installer-assets"
+
+          echo "=== Installer DMG created ==="
+          ls -lh release/Hermes-Installer.dmg
+
+      - name: Stage release assets
+        working-directory: apps/desktop
+        run: |
+          set -euo pipefail
           echo "Artifacts staged in release/:"
           find release -name "*.dmg" -o -name "Hermes.zip" | sort
-          # Save paths for release step.
-          find release -name "*.dmg" > /tmp/release-assets.txt
-          find release -name "Hermes.zip" >> /tmp/release-assets.txt
+          # Save paths for release step — prefer styled installer, fall back to plain DMG.
+          : > /tmp/release-assets.txt
+          # Styled installer DMG (primary)
+          [ -f release/Hermes-Installer.dmg ] && echo "release/Hermes-Installer.dmg" >> /tmp/release-assets.txt
+          # Adhoc zip (secondary)
+          find release -name "Hermes.zip" >> /tmp/release-assets.txt 2>/dev/null || true
           cat /tmp/release-assets.txt
 
       - name: Create GitHub Release (on tag push, via gh CLI)
@@ -142,7 +164,7 @@ jobs:
           - MAX Messenger (platform)
 
           ### Install
-          1. Download the `.dmg` or `Hermes.zip`
+          1. Download `Hermes-Installer.dmg`
           2. Open it, drag **Hermes** to Applications
           3. Right-click → Open (adhoc-signed, not notarized — Gatekeeper
              will prompt once, then allow)

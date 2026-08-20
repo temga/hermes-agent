@@ -258,7 +258,7 @@
         "NSMicrophoneUsageDescription": "Hermes uses the microphone for voice input and voice conversations."
       },
       "gatekeeperAssess": false,
-      "hardenedRuntime": false,
+      "hardenedRuntime": true,
       "target": [
         "dmg",
         "zip"
