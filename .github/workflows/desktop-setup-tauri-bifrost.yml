@@ -79,7 +79,8 @@ jobs:
           cd apps/bootstrap-installer
           # Pin to the EXACT commit SHA — immutable URL avoids GitHub raw cache staleness.
           export HERMES_BUILD_PIN_COMMIT="$GITHUB_SHA"
-          echo "Pinning installer to commit $HERMES_BUILD_PIN_COMMIT"
+          export HERMES_BUILD_PIN_BRANCH="bifrost-edition"
+          echo "Pinning installer to commit $HERMES_BUILD_PIN_COMMIT on branch $HERMES_BUILD_PIN_BRANCH"
 
           # Tauri's notarization uses:
           #   APPLE_API_KEY  = the Key ID (used in JWT header 'kid')

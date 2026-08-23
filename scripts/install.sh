@@ -2120,54 +2120,44 @@ print(f"Enabled Bifrost plugins: {', '.join(plugins_str)}")
 PYEOF
     fi
 
-    # Configure all service providers to use Bifrost
-    # One sk-bf-* key powers: LLM, image gen, web search, STT, TTS
+    # Configure all service providers to use Bifrost via hermes_cli.config
+    # (YAML-aware — no regex, no duplicate keys). One sk-bf-* key powers:
+    # LLM, image gen, web search, STT, TTS.
     if [ -f "$config_file" ] && [ "$copied" -gt 0 ]; then
         "$INSTALL_DIR/venv/bin/python" - "$config_file" <<'PYEOF'
-import sys, re
+import sys
+from hermes_cli.config import load_config, save_config
 
-with open(sys.argv[1], 'r') as f:
-    content = f.read()
+cfg = load_config()
 
-# Set model.provider = bifrost
-content = re.sub(r'^(model:\n  provider:)\s*\S+', r'\1 bifrost', content, count=1, flags=re.MULTILINE)
-# If no model.provider exists, add one after model: line
-if not re.search(r'^model:\n  provider:\s*bifrost', content, re.MULTILINE):
-    content = content.replace('model:\n', 'model:\n  provider: bifrost\n', 1)
+# model: provider + default
+model = cfg.setdefault('model', {})
+model['provider'] = 'bifrost'
+model['default'] = 'neuraldeep/gpt-oss-120b'
 
-# Set model.default (first model from Bifrost catalog)
-if not re.search(r'^  default:\s*neuraldeep/', content, re.MULTILINE):
-    content = re.sub(r'^(model:\n  provider: bifrost\n)', r'\1  default: neuraldeep/gpt-oss-120b\n', content, count=1, flags=re.MULTILINE)
+# image_gen: provider
+img = cfg.setdefault('image_gen', {})
+img['provider'] = 'bifrost'
 
-# Set image_gen.provider = bifrost
-if re.search(r'^image_gen:', content, re.MULTILINE):
-    content = re.sub(r'^(image_gen:\n  provider:)\s*\S+', r'\1 bifrost', content, count=1, flags=re.MULTILINE)
-else:
-    content = content.rstrip() + '\n\nimage_gen:\n  provider: bifrost\n'
+# web: search + extract backends
+web = cfg.setdefault('web', {})
+web['search_backend'] = 'bifrost'
+web['extract_backend'] = 'bifrost'
 
-# Set web search + extract backends to bifrost
-if re.search(r'^web:', content, re.MULTILINE):
-    content = re.sub(r'^(web:\n  search_backend:)\s*\S+', r'\1 bifrost', content, count=1, flags=re.MULTILINE)
-    content = re.sub(r'^(web:\n  extract_backend:)\s*\S+', r'\1 bifrost', content, count=1, flags=re.MULTILINE)
-else:
-    content = content.rstrip() + '\n\nweb:\n  search_backend: bifrost\n  extract_backend: bifrost\n'
+# stt: provider + bifrost config (language: ru is critical — global default is "en")
+stt = cfg.setdefault('stt', {})
+stt['provider'] = 'bifrost'
+stt_bf = stt.setdefault('bifrost', {})
+stt_bf['model'] = 'neuraldeep/whisper-podlodka-turbo'
+stt_bf['language'] = 'ru'
 
-# Set stt.provider = bifrost + language ru (critical: global default is "en")
-if re.search(r'^stt:', content, re.MULTILINE):
-    content = re.sub(r'^(stt:\n  provider:)\s*\S+', r'\1 bifrost', content, count=1, flags=re.MULTILINE)
-    if not re.search(r'^  bifrost:', content[content.index('stt:'):], re.MULTILINE):
-        content = content.replace('stt:\n  provider: bifrost', 'stt:\n  provider: bifrost\n  bifrost:\n    model: neuraldeep/whisper-podlodka-turbo\n    language: ru', 1)
-else:
-    content = content.rstrip() + '\n\nstt:\n  provider: bifrost\n  bifrost:\n    model: neuraldeep/whisper-podlodka-turbo\n    language: ru\n'
+# tts: provider + bifrost config
+tts = cfg.setdefault('tts', {})
+tts['provider'] = 'bifrost'
+tts_bf = tts.setdefault('bifrost', {})
+tts_bf['model'] = 'espeech-tts'
 
-# Set tts.provider = bifrost
-if re.search(r'^tts:', content, re.MULTILINE):
-    content = re.sub(r'^(tts:\n  provider:)\s*\S+', r'\1 bifrost', content, count=1, flags=re.MULTILINE)
-else:
-    content = content.rstrip() + '\n\ntts:\n  provider: bifrost\n  bifrost:\n    model: espeech-tts\n'
-
-with open(sys.argv[1], 'w') as f:
-    f.write(content)
+save_config(cfg, merge_existing=True)
 print("Configured all service providers → bifrost")
 PYEOF
     fi
