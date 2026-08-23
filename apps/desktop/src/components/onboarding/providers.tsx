@@ -101,67 +101,41 @@ export function OpenRouterProviderRow({ onClick }: { onClick: () => void }) {
   return <KeyProviderRow onClick={onClick} pitch={t.onboarding.openRouterPitch} title="OpenRouter" />
 }
 
-// --- RU ecosystem providers (featured rows for the RU edition build) ---
-// These are model-providers that ship bundled in the RU DMG. They use API keys
-// (not OAuth), so each row opens the key form preselected to the right env var.
-// Styled as featured (accent background) to surface them above Nous Portal.
-
-const RU_ROW_CLASS =
+// --- Bifrost Gateway provider (featured row for the Bifrost edition build) ---
+// This is the model-provider that ships bundled in the Bifrost DMG. It uses an
+// API key (sk-bf-*), so the row opens the key form preselected to BIFROST_API_KEY.
+// One key powers LLM + image gen + web + STT + TTS — surfaced above all others.
+const BIFROST_ROW_CLASS =
   'group relative flex w-full items-center justify-between gap-4 rounded-[8px] bg-primary/[0.06] px-3 py-2.5 text-left transition-colors hover:bg-primary/10'
 
-export function RouterAiProviderRow({ onClick }: { onClick: () => void }) {
+export function BifrostProviderRow({ onClick }: { onClick: () => void }) {
   const { t } = useI18n()
 
   return (
-    <RowButton className={RU_ROW_CLASS} onClick={onClick}>
+    <RowButton className={BIFROST_ROW_CLASS} onClick={onClick}>
       <span aria-hidden className="arc-border arc-reverse arc-nous" />
       <div className="min-w-0">
         <div className="flex items-center gap-2">
-          <RouterAiMark className="size-5 shrink-0" />
-          <span className="text-[length:var(--conversation-text-font-size)] font-semibold">RouterAI</span>
+          <BifrostMark className="size-5 shrink-0" />
+          <span className="text-[length:var(--conversation-text-font-size)] font-semibold">Bifrost Gateway</span>
+          <span className="inline-flex items-center gap-1.5 bg-primary px-2 py-0.5 text-[0.64rem] font-semibold uppercase tracking-[0.16em] text-primary-foreground">
+            <span aria-hidden="true" className="dither inline-block size-2 shrink-0" />
+            {t.onboarding.recommended}
+          </span>
         </div>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">{t.onboarding.routerAiPitch}</p>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">One key (sk-bf-*) — LLM, image gen, web search, STT &amp; TTS.</p>
       </div>
       <ChevronRight className="size-4 shrink-0 text-primary transition group-hover:translate-x-0.5" />
     </RowButton>
   )
 }
 
-export function NeuralDeepProviderRow({ onClick }: { onClick: () => void }) {
-  const { t } = useI18n()
-
-  return (
-    <RowButton className={RU_ROW_CLASS} onClick={onClick}>
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <NeuralDeepMark className="size-5 shrink-0" />
-          <span className="text-[length:var(--conversation-text-font-size)] font-semibold">NeuralDeep</span>
-        </div>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">{t.onboarding.neuralDeepPitch}</p>
-      </div>
-      <ChevronRight className="size-4 shrink-0 text-primary transition group-hover:translate-x-0.5" />
-    </RowButton>
-  )
-}
-
-// Compact inline SVG marks for the RU providers — avoids shipping asset files.
-function RouterAiMark({ className }: { className?: string }) {
+// Compact inline SVG mark for Bifrost — avoids shipping asset files.
+function BifrostMark({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <rect fill="#0EA5E9" height="24" rx="5" width="24" />
-      <path d="M7 16V8h2.5l2.5 4 2.5-4H17v8h-2v-4.5L12.5 15 10 11.5V16H7z" fill="white" />
-    </svg>
-  )
-}
-
-function NeuralDeepMark({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <rect fill="#7C3AED" height="24" rx="5" width="24" />
-      <circle cx="8" cy="12" fill="white" r="2" />
-      <circle cx="16" cy="8" fill="white" r="1.5" />
-      <circle cx="16" cy="16" fill="white" r="1.5" />
-      <path d="M8 12l8-4M8 12l8 4" stroke="white" strokeWidth="1.2" />
+      <rect fill="#1a1a2e" height="24" rx="5" width="24" />
+      <path d="M6 18L10 6h4l4 12h-3l-1-3h-4l-1 3H6zm5-5h2l-1-3-1 3z" fill="#e94560" />
     </svg>
   )
 }

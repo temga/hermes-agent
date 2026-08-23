@@ -30,23 +30,21 @@ import type { ModelOptionProvider, OAuthProvider } from '@/types/hermes'
 
 import { DocsLink, FlowPanel, Status } from './flow'
 import {
+  BifrostProviderRow,
   FeaturedProviderRow,
   FireworksProviderRow,
-  NeuralDeepProviderRow,
   OpenRouterProviderRow,
   ProviderRow,
-  RouterAiProviderRow,
   sortProviders
 } from './providers'
 
 export {
+  BifrostProviderRow,
   FeaturedProviderRow,
   FireworksProviderRow,
   KeyProviderRow,
-  NeuralDeepProviderRow,
   OpenRouterProviderRow,
   ProviderRow,
-  RouterAiProviderRow,
   providerTitle,
   sortProviders
 } from './providers'
@@ -70,7 +68,16 @@ export interface ApiKeyOption {
 
 // Curated order mirrors CANONICAL_PROVIDERS: Fireworks sits #2 overall (after
 // Nous Portal OAuth), ahead of OpenRouter and the rest of the key catalog.
+// Bifrost leads for the Bifrost edition build — one key (sk-bf-*) powers all
+// services (LLM + image gen + web + STT + TTS).
 const API_KEY_OPTIONS: ApiKeyOption[] = [
+  {
+    id: 'bifrost',
+    name: 'Bifrost Gateway',
+    envKey: 'BIFROST_API_KEY',
+    docsUrl: 'https://router.rove-ai.ru',
+    placeholder: 'sk-bf-...'
+  },
   {
     id: 'fireworks',
     name: 'Fireworks AI',
@@ -485,11 +492,10 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
   return (
     <div className="grid gap-2">
       <div className="grid max-h-[60dvh] gap-2 overflow-y-auto p-1">
-        {/* RU ecosystem providers — bundled in the RU edition DMG. Surface them
-            above Nous Portal so Russian users see local options first. Each row
-            opens the API-key form preselected to the provider's env var. */}
-        <RouterAiProviderRow onClick={() => openKeyForm('ROUTERAI_API_KEY')} />
-        <NeuralDeepProviderRow onClick={() => openKeyForm('NEURALDEEP_API_KEY')} />
+        {/* Bifrost Gateway — bundled in the Bifrost edition DMG. Surface it
+            above Nous Portal so users see the one-key option first. The row
+            opens the API-key form preselected to BIFROST_API_KEY (sk-bf-*). */}
+        <BifrostProviderRow onClick={() => openKeyForm('BIFROST_API_KEY')} />
         {featured ? <FeaturedProviderRow onSelect={select} provider={featured} /> : null}
         {showRest ? (
           <>

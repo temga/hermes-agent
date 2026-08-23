@@ -61,7 +61,7 @@ import {
 import { decideBootstrapRepair } from './bootstrap-repair-guard'
 import { runBootstrap } from './bootstrap-runner'
 import { detectBundleSkew } from './bundle-skew'
-import { ensureRuPlugins } from './ru-plugins-bootstrap'
+import { ensureBifrostPlugins } from './bifrost-plugins-bootstrap'
 import { applyConnectionChange, resolveTerminalConnection } from './connection-apply'
 import {
   apiRequestRegistryConnectionId,
@@ -4789,14 +4789,14 @@ async function ensureRuntime(backend) {
     error: null
   })
 
-  // Install bundled RU-ecosystem plugins (routerai, neuraldeep, max, etc.)
+  // Install bundled Bifrost Gateway plugins (LLM, image gen, web, STT, TTS)
   // into ~/.hermes/plugins/ + enable in config.yaml. Idempotent — a no-op
   // once the stamp file exists. Non-fatal: a failure logs but never blocks
-  // startup. See electron/ru-plugins-bootstrap.ts for details.
+  // startup. See electron/bifrost-plugins-bootstrap.ts for details.
   try {
-    await ensureRuPlugins(HERMES_HOME, (msg) => rememberLog(`[ru-plugins] ${msg}`))
+    await ensureBifrostPlugins(HERMES_HOME, (msg) => rememberLog(`[bifrost-plugins] ${msg}`))
   } catch (err) {
-    rememberLog(`[ru-plugins] unexpected error: ${(err as Error).message}`)
+    rememberLog(`[bifrost-plugins] unexpected error: ${(err as Error).message}`)
   }
 
   return backend

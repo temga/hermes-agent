@@ -328,7 +328,7 @@ emit_manifest() {
     if [ "$INCLUDE_DESKTOP" = true ]; then
         desktop_stage='{"name":"desktop","title":"Build desktop app","category":"runtime","needs_user_input":false},'
     fi
-    printf '%s' '{"protocol_version":1,"stages":[{"name":"prerequisites","title":"System prerequisites","category":"runtime","needs_user_input":false},{"name":"repository","title":"Download Hermes Agent","category":"runtime","needs_user_input":false},{"name":"venv","title":"Create Python virtual environment","category":"runtime","needs_user_input":false},{"name":"python-deps","title":"Install Python dependencies","category":"runtime","needs_user_input":false},{"name":"node-deps","title":"Install browser-tool dependencies","category":"runtime","needs_user_input":false},{"name":"path","title":"Install hermes command","category":"runtime","needs_user_input":false},{"name":"config","title":"Prepare config and skills","category":"configuration","needs_user_input":false},{"name":"ru-plugins","title":"Install RU ecosystem plugins","category":"configuration","needs_user_input":false},{"name":"setup","title":"Configure API keys and settings","category":"configuration","needs_user_input":true},{"name":"gateway","title":"Configure gateway service","category":"configuration","needs_user_input":true},'"$desktop_stage"'{"name":"complete","title":"Finish install","category":"runtime","needs_user_input":false}]}'
+    printf '%s' '{"protocol_version":1,"stages":[{"name":"prerequisites","title":"System prerequisites","category":"runtime","needs_user_input":false},{"name":"repository","title":"Download Hermes Agent","category":"runtime","needs_user_input":false},{"name":"venv","title":"Create Python virtual environment","category":"runtime","needs_user_input":false},{"name":"python-deps","title":"Install Python dependencies","category":"runtime","needs_user_input":false},{"name":"node-deps","title":"Install browser-tool dependencies","category":"runtime","needs_user_input":false},{"name":"path","title":"Install hermes command","category":"runtime","needs_user_input":false},{"name":"config","title":"Prepare config and skills","category":"configuration","needs_user_input":false},{"name":"bifrost-plugins","title":"Install Bifrost Gateway plugins","category":"configuration","needs_user_input":false},{"name":"setup","title":"Configure API keys and settings","category":"configuration","needs_user_input":true},{"name":"gateway","title":"Configure gateway service","category":"configuration","needs_user_input":true},'"$desktop_stage"'{"name":"complete","title":"Finish install","category":"runtime","needs_user_input":false}]}'
     printf '\n'
 }
 
@@ -2025,76 +2025,76 @@ SOUL_EOF
     fi
 }
 
-# RU-EDITION: install Russian ecosystem plugins (RouterAI, NeuralDeep, MAX, etc.)
-# Clones temga/hermes-ru-ecosystem and copies plugin directories into
-# ~/.hermes/plugins/, then enables them in config.yaml.
-install_ru_plugins() {
+# BIFROST-EDITION: install Bifrost Gateway plugins (LLM, image gen, web, STT, TTS)
+# Clones temga/hermes-plugin-bifrost-gateway and copies 5 plugin directories
+# into ~/.hermes/plugins/, enables them in config.yaml, and sets all service
+# providers to "bifrost" so one sk-bf-* key powers everything.
+install_bifrost_plugins() {
     local plugins_dir="$HERMES_HOME/plugins"
-    local ru_repo_url="https://github.com/temga/hermes-ru-ecosystem.git"
-    local ru_clone_dir="$HERMES_HOME/.ru-ecosystem-cache"
-    local ru_stamp="$plugins_dir/.ru-plugins-stamp"
+    local bf_repo_url="https://github.com/temga/hermes-plugin-bifrost-gateway.git"
+    local bf_clone_dir="$HERMES_HOME/.bifrost-cache"
+    local bf_stamp="$plugins_dir/.bifrost-plugins-stamp"
 
-    log_info "Installing Russian ecosystem plugins..."
+    log_info "Installing Bifrost Gateway plugins..."
 
     # Idempotency: skip if already installed and stamp is fresh
-    if [ -f "$ru_stamp" ] && [ -d "$plugins_dir" ]; then
-        log_info "RU plugins already installed (stamp found), skipping"
+    if [ -f "$bf_stamp" ] && [ -d "$plugins_dir" ]; then
+        log_info "Bifrost plugins already installed (stamp found), skipping"
         return 0
     fi
 
     mkdir -p "$plugins_dir"
 
-    # Clone (or update) the RU ecosystem repo
-    if [ -d "$ru_clone_dir/.git" ]; then
-        log_info "Updating RU ecosystem cache..."
-        git -C "$ru_clone_dir" pull --ff-only 2>&1 || true
-        git -C "$ru_clone_dir" submodule update --init --recursive 2>&1 || true
+    # Clone (or update) the Bifrost plugin repo
+    if [ -d "$bf_clone_dir/.git" ]; then
+        log_info "Updating Bifrost plugin cache..."
+        git -C "$bf_clone_dir" pull --ff-only 2>&1 || true
     else
-        log_info "Cloning RU ecosystem..."
-        rm -rf "$ru_clone_dir"
-        if ! git clone --depth 1 "$ru_repo_url" "$ru_clone_dir" 2>&1; then
-            log_error "Failed to clone RU ecosystem — plugins will not be available"
-            log_info "You can install them manually later from $ru_repo_url"
+        log_info "Cloning Bifrost plugin pack..."
+        rm -rf "$bf_clone_dir"
+        if ! git clone --depth 1 "$bf_repo_url" "$bf_clone_dir" 2>&1; then
+            log_error "Failed to clone Bifrost plugins — they will not be available"
+            log_info "You can install them manually later from $bf_repo_url"
             return 0  # non-fatal
-        fi
-        # Init submodules separately for better error visibility
-        if ! git -C "$ru_clone_dir" submodule update --init --recursive 2>&1; then
-            log_warn "Some submodules failed to init — trying individual clones"
-            # Fallback: init submodules one by one
-            git -C "$ru_clone_dir" submodule foreach --recursive 'git submodule update --init 2>&1 || true' || true
         fi
     fi
 
-    # Copy ALL plugin directories preserving category structure
-    # (model-providers/, platforms/, backends/) so Hermes plugin scanner finds them
+    # Plugin list: category/name (mirrors install.sh in hermes-plugin-bifrost-gateway)
+    # Unlike RU ecosystem, Bifrost has no submodules — single flat repo.
+    local bf_plugins="model-providers/bifrost image_gen/bifrost web/bifrost transcription/bifrost tts/bifrost"
+
     local copied=0
-    local plugin_name
-    while IFS= read -r yaml_file; do
-        local src_dir="$(dirname "$yaml_file")"
-        # Relative path from ru_clone_dir preserves category dirs
-        local rel="${src_dir#$ru_clone_dir/}"
-        local dest="$plugins_dir/$rel"
+    for plugin_path in $bf_plugins; do
+        local src_dir="$bf_clone_dir/$plugin_path"
+        local dest="$plugins_dir/$plugin_path"
+
+        if [ ! -f "$src_dir/plugin.yaml" ]; then
+            log_error "Source not found: $src_dir/plugin.yaml"
+            continue
+        fi
+
         mkdir -p "$(dirname "$dest")"
         if [ -d "$dest" ]; then
             rm -rf "$dest"
         fi
         cp -r "$src_dir" "$dest"
         rm -rf "$dest/.git" "$dest/__pycache__" 2>/dev/null || true
-        plugin_name=$(basename "$src_dir")
-        copied=$((copied + 1))
-        log_info "Installed plugin: $plugin_name → plugins/$rel"
-    done < <(find "$ru_clone_dir" -name "plugin.yaml" -o -name "plugin.yml" 2>/dev/null)
 
-    # Enable plugins in config.yaml via Python (portable, no sed BSD/GNU issues).
-    # Writes path-derived keys (e.g. "model-providers/routerai") that match
-    # PluginManifest.key — the value PluginManager matches against in
-    # plugins.enabled. Bare leaf names ("routerai") do NOT match because
-    # manifest.key is path-derived and manifest.name comes from plugin.yaml
-    # (e.g. "routerai-provider"), so bare names leave plugins disabled.
+        # Copy shared key resolver into every plugin directory
+        if [ -f "$bf_clone_dir/_keyresolver.py" ]; then
+            cp "$bf_clone_dir/_keyresolver.py" "$dest/_keyresolver.py"
+        fi
+
+        copied=$((copied + 1))
+        log_info "Installed plugin: $plugin_path → plugins/$plugin_path"
+    done
+
+    # Enable plugins in config.yaml via Python (same approach as RU edition).
+    # Uses path-derived keys that match PluginManifest.key.
     local config_file="$HERMES_HOME/config.yaml"
     if [ -f "$config_file" ] && [ "$copied" -gt 0 ]; then
-        local ru_plugins="model-providers/routerai model-providers/neuraldeep platforms/max backends/routerai-imagegen backends/neuraldeep-search"
-        "$INSTALL_DIR/venv/bin/python" - "$config_file" "$ru_plugins" <<'PYEOF'
+        local enable_names="model-providers/bifrost image_gen/bifrost web/bifrost transcription/bifrost tts/bifrost"
+        "$INSTALL_DIR/venv/bin/python" - "$config_file" "$enable_names" <<'PYEOF'
 import sys, re
 path, plugins_str = sys.argv[1], sys.argv[2].split()
 with open(path, 'r') as f:
@@ -2105,29 +2105,78 @@ if not re.search(r'^plugins:\s*$', content, re.MULTILINE):
     content = content.rstrip() + '\n\nplugins:\n  enabled: []\n'
 
 # Find enabled list and add missing plugins using 4-space item indent
-# (2 for "enabled:" + 2 for list items), matching Hermes config convention
-# and the Electron ru-plugins-bootstrap.ts ensurePluginsEnabled() regex.
 for p in plugins_str:
     pattern = r'^    - ' + re.escape(p) + r'\s*$'
     if not re.search(pattern, content, re.MULTILINE):
-        # Replace 'enabled: []' → 'enabled:\n    - p'
         if re.search(r'enabled:\s*\[\]', content):
             content = re.sub(r'enabled:\s*\[\]', 'enabled:', content, count=1)
             content = content.replace('  enabled:', '  enabled:\n    - ' + p, 1)
         else:
-            # Append after 'enabled:' line with 4-space indent
             content = re.sub(r'^(  enabled:)\s*$', r'\1\n    - ' + p, content, count=1, flags=re.MULTILINE)
 
 with open(path, 'w') as f:
     f.write(content)
-print(f"Enabled RU plugins: {', '.join(plugins_str)}")
+print(f"Enabled Bifrost plugins: {', '.join(plugins_str)}")
+PYEOF
+    fi
+
+    # Configure all service providers to use Bifrost
+    # One sk-bf-* key powers: LLM, image gen, web search, STT, TTS
+    if [ -f "$config_file" ] && [ "$copied" -gt 0 ]; then
+        "$INSTALL_DIR/venv/bin/python" - "$config_file" <<'PYEOF'
+import sys, re
+
+with open(sys.argv[1], 'r') as f:
+    content = f.read()
+
+# Set model.provider = bifrost
+content = re.sub(r'^(model:\n  provider:)\s*\S+', r'\1 bifrost', content, count=1, flags=re.MULTILINE)
+# If no model.provider exists, add one after model: line
+if not re.search(r'^model:\n  provider:\s*bifrost', content, re.MULTILINE):
+    content = content.replace('model:\n', 'model:\n  provider: bifrost\n', 1)
+
+# Set model.default (first model from Bifrost catalog)
+if not re.search(r'^  default:\s*neuraldeep/', content, re.MULTILINE):
+    content = re.sub(r'^(model:\n  provider: bifrost\n)', r'\1  default: neuraldeep/gpt-oss-120b\n', content, count=1, flags=re.MULTILINE)
+
+# Set image_gen.provider = bifrost
+if re.search(r'^image_gen:', content, re.MULTILINE):
+    content = re.sub(r'^(image_gen:\n  provider:)\s*\S+', r'\1 bifrost', content, count=1, flags=re.MULTILINE)
+else:
+    content = content.rstrip() + '\n\nimage_gen:\n  provider: bifrost\n'
+
+# Set web search + extract backends to bifrost
+if re.search(r'^web:', content, re.MULTILINE):
+    content = re.sub(r'^(web:\n  search_backend:)\s*\S+', r'\1 bifrost', content, count=1, flags=re.MULTILINE)
+    content = re.sub(r'^(web:\n  extract_backend:)\s*\S+', r'\1 bifrost', content, count=1, flags=re.MULTILINE)
+else:
+    content = content.rstrip() + '\n\nweb:\n  search_backend: bifrost\n  extract_backend: bifrost\n'
+
+# Set stt.provider = bifrost + language ru (critical: global default is "en")
+if re.search(r'^stt:', content, re.MULTILINE):
+    content = re.sub(r'^(stt:\n  provider:)\s*\S+', r'\1 bifrost', content, count=1, flags=re.MULTILINE)
+    if not re.search(r'^  bifrost:', content[content.index('stt:'):], re.MULTILINE):
+        content = content.replace('stt:\n  provider: bifrost', 'stt:\n  provider: bifrost\n  bifrost:\n    model: neuraldeep/whisper-podlodka-turbo\n    language: ru', 1)
+else:
+    content = content.rstrip() + '\n\nstt:\n  provider: bifrost\n  bifrost:\n    model: neuraldeep/whisper-podlodka-turbo\n    language: ru\n'
+
+# Set tts.provider = bifrost
+if re.search(r'^tts:', content, re.MULTILINE):
+    content = re.sub(r'^(tts:\n  provider:)\s*\S+', r'\1 bifrost', content, count=1, flags=re.MULTILINE)
+else:
+    content = content.rstrip() + '\n\ntts:\n  provider: bifrost\n  bifrost:\n    model: espeech-tts\n'
+
+with open(sys.argv[1], 'w') as f:
+    f.write(content)
+print("Configured all service providers → bifrost")
 PYEOF
     fi
 
     # Write stamp
-    printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$ru_stamp"
+    printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$bf_stamp"
 
-    log_success "Installed $copied RU plugins to ~/.hermes/plugins/"
+    log_success "Installed $copied Bifrost plugins to ~/.hermes/plugins/"
+    log_info "One BIFROST_API_KEY (sk-bf-*) powers LLM + image gen + web + STT + TTS"
 }
 
 find_system_browser() {
@@ -3509,10 +3558,10 @@ run_stage_body() {
             require_install_dir
             copy_config_templates
             ;;
-        ru-plugins)
+        bifrost-plugins)
             detect_os
             resolve_install_layout
-            install_ru_plugins
+            install_bifrost_plugins
             ;;
         setup)
             detect_os
@@ -3620,7 +3669,7 @@ main() {
     install_computer_use_driver
     setup_path
     copy_config_templates
-    install_ru_plugins
+    install_bifrost_plugins
     run_setup_wizard
     maybe_start_gateway
 

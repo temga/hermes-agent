@@ -1,0 +1,7 @@
+name: bifrost
+version: 1.0.0
+description: "Bifrost image generation backend. Routes through Bifrost gateway /v1/images/generations. Same sk-bf-* key as LLM. Supports all image models available via gateway (GPT Image, Flux, Seedream, etc)."
+author: temga
+kind: backend
+requires_env:
+  - BIFROST_API_KEY

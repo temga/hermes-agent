@@ -222,8 +222,8 @@
         "to": "icon.ico"
       },
       {
-        "from": "resources/ru-plugins",
-        "to": "ru-plugins",
+        "from": "resources/bifrost-plugins",
+        "to": "bifrost-plugins",
         "filter": [
           "**/*",
           "!**/.git",
