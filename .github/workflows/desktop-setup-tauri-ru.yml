@@ -85,19 +85,35 @@ jobs:
         env:
           TAURI_ENV_PLATFORM: darwin
 
-      - name: Find and rename DMG
+      - name: Strip adhoc signature and rebuild unsigned DMG
         id: find_dmg
         run: |
-          DMG=$(find apps/bootstrap-installer/src-tauri/target/release/bundle/dmg -name "*.dmg" -type f 2>/dev/null | head -1)
-          if [ -z "$DMG" ]; then
-            echo "ERROR: No DMG found"
+          set -euo pipefail
+          # Tauri always adhoc-signs on macOS (identity "-") when no Developer ID
+          # certificate is configured. On macOS Sequoia/Sonoma, adhoc + quarantine
+          # = "app is damaged" error. Removing the signature makes it truly unsigned,
+          # which gives a better UX: "unidentified developer" → right-click → Open.
+          APP=$(find apps/bootstrap-installer/src-tauri/target/release/bundle/macos -name "*.app" -type d | head -1)
+          if [ -z "$APP" ]; then
+            echo "ERROR: No .app found"
             find apps/bootstrap-installer/src-tauri/target/release/bundle -type f 2>/dev/null || true
             exit 1
           fi
-          RENAMED="apps/bootstrap-installer/src-tauri/target/release/bundle/dmg/Hermes-Setup-RU.dmg"
-          cp "$DMG" "$RENAMED"
+          echo "Found app: $APP"
+
+          # Remove adhoc signature → truly unsigned
+          codesign --remove-signature "$APP"
+          echo "Signature removed. Verifying..."
+          codesign -dv --verbose=4 "$APP" 2>&1 || echo "(expected: no signature found)"
+
+          # Create fresh DMG from the unsigned .app
+          DMG_DIR="apps/bootstrap-installer/src-tauri/target/release/bundle/dmg"
+          mkdir -p "$DMG_DIR"
+          RENAMED="$DMG_DIR/Hermes-Setup-RU.dmg"
+          rm -f "$RENAMED"
+          hdiutil create -volname "Hermes" -srcfolder "$APP" -ov -format UDZO "$RENAMED"
           echo "dmg_path=$RENAMED" >> "$GITHUB_OUTPUT"
-          echo "Found: $DMG → $RENAMED"
+          echo "Created unsigned DMG:"
           ls -lh "$RENAMED"
 
       - name: Create GitHub Release (on tag push, via gh CLI)
@@ -116,7 +132,7 @@ jobs:
           ### Install
           1. Download `Hermes-Setup-RU.dmg`
           2. Open, drag Hermes to Applications
-          3. `xattr -cr /Applications/Hermes.app`
+          3. Right-click → Open (first launch only — unsigned, not notarized)
           4. Launch — installer will download Hermes Agent + RU plugins automatically
 
           ### What it does
