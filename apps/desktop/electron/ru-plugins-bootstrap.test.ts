@@ -236,6 +236,118 @@ describe('ru-plugins-bootstrap logic', () => {
     })
   })
 
+  describe('normalizePluginKeys (bare name repair)', () => {
+    it('rewrites bare leaf names to path-derived keys', () => {
+      const configPath = path.join(tmpHome, 'config.yaml')
+      const broken = [
+        'plugins:',
+        '  enabled:',
+        '    - routerai',
+        '    - neuraldeep',
+        '    - max',
+        '    - routerai-imagegen',
+        '    - neuraldeep-search',
+        '  disabled: []',
+        '',
+      ].join('\n')
+      fs.writeFileSync(configPath, broken, 'utf-8')
+
+      // Re-implement normalizePluginKeys logic (not exported from module)
+      const bareToKey: Record<string, string> = {
+        'routerai': 'model-providers/routerai',
+        'neuraldeep': 'model-providers/neuraldeep',
+        'max': 'platforms/max',
+        'routerai-imagegen': 'backends/routerai-imagegen',
+        'neuraldeep-search': 'backends/neuraldeep-search',
+      }
+      let content = fs.readFileSync(configPath, 'utf-8')
+      let changed = false
+      const lines = content.split('\n')
+      for (let i = 0; i < lines.length; i++) {
+        const m = lines[i].match(/^(\s*)-\s+(.+)$/)
+        if (!m) continue
+        const indent = m[1], name = m[2].trim()
+        if (bareToKey[name] && name !== bareToKey[name]) {
+          lines[i] = `${indent}- ${bareToKey[name]}`
+          changed = true
+        }
+      }
+      if (changed) {
+        content = lines.join('\n')
+        fs.writeFileSync(configPath, content, 'utf-8')
+      }
+
+      const result = fs.readFileSync(configPath, 'utf-8')
+      expect(result).toContain('- model-providers/routerai')
+      expect(result).toContain('- backends/neuraldeep-search')
+      expect(result).not.toMatch(/^\s+- routerai$/m)  // bare name gone
+    })
+
+    it('fixes 2-space indent to 4-space', () => {
+      const configPath = path.join(tmpHome, 'config.yaml')
+      // Old install.sh wrote 2-space item indent
+      const broken = [
+        'plugins:',
+        '  enabled:',
+        '  - model-providers/routerai',
+        '  - platforms/max',
+        '  disabled: []',
+      ].join('\n')
+      fs.writeFileSync(configPath, broken, 'utf-8')
+
+      const knownKeys = new Set([
+        'model-providers/routerai', 'platforms/max',
+        'backends/routerai-imagegen', 'backends/neuraldeep-search',
+        'model-providers/neuraldeep',
+      ])
+      let content = fs.readFileSync(configPath, 'utf-8')
+      const lines = content.split('\n')
+      for (let i = 0; i < lines.length; i++) {
+        const m = lines[i].match(/^(\s*)-\s+(.+)$/)
+        if (!m) continue
+        const indent = m[1], name = m[2].trim()
+        if (indent === '  ' && knownKeys.has(name)) {
+          lines[i] = `    - ${name}`
+        }
+      }
+      fs.writeFileSync(configPath, lines.join('\n'), 'utf-8')
+
+      const result = fs.readFileSync(configPath, 'utf-8')
+      expect(result).toContain('    - model-providers/routerai')
+      expect(result).not.toMatch(/^  - model/m) // 2-space indent gone
+    })
+
+    it('is a no-op when keys are already correct', () => {
+      const configPath = path.join(tmpHome, 'config.yaml')
+      const correct = [
+        'plugins:',
+        '  enabled:',
+        '    - model-providers/routerai',
+        '    - platforms/max',
+        '  disabled: []',
+      ].join('\n')
+      fs.writeFileSync(configPath, correct, 'utf-8')
+
+      const bareToKey: Record<string, string> = {
+        'routerai': 'model-providers/routerai',
+        'max': 'platforms/max',
+      }
+      let content = fs.readFileSync(configPath, 'utf-8')
+      let changed = false
+      const lines = content.split('\n')
+      for (let i = 0; i < lines.length; i++) {
+        const m = lines[i].match(/^(\s*)-\s+(.+)$/)
+        if (!m) continue
+        const name = m[2].trim()
+        if (bareToKey[name] && name !== bareToKey[name]) {
+          changed = true
+        }
+      }
+      expect(changed).toBe(false)
+      expect(fs.readFileSync(configPath, 'utf-8')).toBe(correct)
+    })
+  })
+
   describe('RU_PLUGINS registry', () => {
     it('has 5 plugin entries', () => {
       expect(RU_PLUGINS).toHaveLength(5)

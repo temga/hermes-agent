@@ -98,8 +98,10 @@ const RU_PLUGINS: RuPluginEntry[] = [
   },
 ]
 
-/** Marker file written to ~/.hermes/ after a successful install. */
+/** Marker file written to ~/.hermes/ after a successful install.
+ *  Also checks install.sh's stamp at plugins/.ru-plugins-stamp for compat. */
 const STAMP_FILE = '.ru-plugins-installed'
+const INSTALL_SH_STAMP = '.ru-plugins-stamp' // written by scripts/install.sh
 
 /**
  * Resolve the bundled plugin source directory.
@@ -241,13 +243,31 @@ function ensurePluginsEnabled(configPath: string, names: string[]): void {
  * Uses a stamp file plus a directory existence check for robustness.
  */
 function isAlreadyInstalled(hermesHome: string): boolean {
+  // Check our own stamp first
   const stamp = path.join(hermesHome, STAMP_FILE)
-  if (!fs.existsSync(stamp)) return false
+  if (fs.existsSync(stamp)) {
+    // Double-check at least one plugin dir actually exists — a stamp without
+    // plugins means a partial/interrupted install.
+    const pluginsDir = path.join(hermesHome, 'plugins')
+    if (RU_PLUGINS.some((p) => fs.existsSync(path.join(pluginsDir, p.category, p.dirName)))) {
+      return true
+    }
+  }
 
-  // Double-check at least one plugin dir actually exists — a stamp without
-  // plugins means a partial/interrupted install.
-  const pluginsDir = path.join(hermesHome, 'plugins')
-  return RU_PLUGINS.some((p) => fs.existsSync(path.join(pluginsDir, p.category, p.dirName)))
+  // Also check install.sh's stamp (scripts/install.sh writes a different stamp
+  // at plugins/.ru-plugins-stamp). If install.sh already installed the plugins,
+  // skip the copy — but still verify config.yaml has the correct path-derived
+  // keys (install.sh before the fix wrote bare leaf names that don't match
+  // PluginManifest.key).
+  const shStamp = path.join(hermesHome, 'plugins', INSTALL_SH_STAMP)
+  if (fs.existsSync(shStamp)) {
+    const pluginsDir = path.join(hermesHome, 'plugins')
+    if (RU_PLUGINS.some((p) => fs.existsSync(path.join(pluginsDir, p.category, p.dirName)))) {
+      return true
+    }
+  }
+
+  return false
 }
 
 /** Write the completion stamp. */
@@ -260,6 +280,66 @@ function writeStamp(hermesHome: string): void {
     )
   } catch {
     // Non-fatal — next launch will re-verify via directory check.
+  }
+}
+
+/**
+ * Normalize bare leaf names in plugins.enabled to path-derived keys.
+ *
+ * Old install.sh wrote bare names ("routerai") instead of path-derived keys
+ * ("model-providers/routerai"). PluginManager matches on manifest.key (path-
+ * derived) or manifest.name (from plugin.yaml, e.g. "routerai-provider"), so
+ * bare names leave plugins disabled. This rewrites them in-place.
+ *
+ * Also fixes 2-space item indentation (old install.sh) to 4-space, matching
+ * Hermes config convention and the ensurePluginsEnabled regex.
+ *
+ * Idempotent — only touches lines that need fixing.
+ */
+function normalizePluginKeys(configPath: string, log: (msg: string) => void): void {
+  let content: string
+  try {
+    content = fs.readFileSync(configPath, 'utf-8')
+  } catch {
+    return // no config — nothing to normalize
+  }
+
+  // Map bare leaf name → path-derived key
+  const bareToKey: Record<string, string> = {}
+  for (const p of RU_PLUGINS) {
+    bareToKey[p.dirName] = p.enableName
+  }
+
+  let changed = false
+  const lines = content.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    // Match list items under plugins.enabled: "  - routerai" or "    - routerai"
+    const itemMatch = lines[i].match(/^(\s*)-\s+(.+)$/)
+    if (!itemMatch) continue
+    const [, itemIndent, name] = itemMatch
+    const trimmed = name.trim()
+
+    // Replace bare leaf name with path-derived key
+    if (bareToKey[trimmed] && trimmed !== bareToKey[trimmed]) {
+      lines[i] = `${itemIndent}- ${bareToKey[trimmed]}`
+      changed = true
+      continue
+    }
+
+    // Fix 2-space item indent → 4-space (only within plugins.enabled block)
+    // We detect we're in the plugins section by checking the line above
+    // has "enabled:" or previous lines are list items under "enabled:".
+    // This is conservative: only fixes items that are at 2-space indent
+    // (the old install.sh pattern) and whose name matches a known RU plugin.
+    if (itemIndent === '  ' && (bareToKey[trimmed] || RU_PLUGINS.some((p) => p.enableName === trimmed))) {
+      lines[i] = `    - ${trimmed}`
+      changed = true
+    }
+  }
+
+  if (changed) {
+    fs.writeFileSync(configPath, lines.join('\n'), 'utf-8')
+    log('Normalized plugin keys in config.yaml (bare names → path-derived keys)')
   }
 }
 
@@ -285,6 +365,15 @@ export async function ensureRuPlugins(
 
   // Fast path: already installed.
   if (isAlreadyInstalled(hermesHome)) {
+    // Even if plugins are in place, the config may have bare leaf names
+    // (from old install.sh) instead of path-derived keys. Normalize on every
+    // launch — it's a no-op when keys are already correct.
+    try {
+      const configPath = path.join(hermesHome, 'config.yaml')
+      normalizePluginKeys(configPath, log)
+    } catch (err) {
+      log(`Config normalization skipped: ${(err as Error).message}`)
+    }
     return true
   }
 

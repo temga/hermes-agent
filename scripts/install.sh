@@ -2085,10 +2085,15 @@ install_ru_plugins() {
         log_info "Installed plugin: $plugin_name → plugins/$rel"
     done < <(find "$ru_clone_dir" -name "plugin.yaml" -o -name "plugin.yml" 2>/dev/null)
 
-    # Enable plugins in config.yaml via Python (portable, no sed BSD/GNU issues)
+    # Enable plugins in config.yaml via Python (portable, no sed BSD/GNU issues).
+    # Writes path-derived keys (e.g. "model-providers/routerai") that match
+    # PluginManifest.key — the value PluginManager matches against in
+    # plugins.enabled. Bare leaf names ("routerai") do NOT match because
+    # manifest.key is path-derived and manifest.name comes from plugin.yaml
+    # (e.g. "routerai-provider"), so bare names leave plugins disabled.
     local config_file="$HERMES_HOME/config.yaml"
     if [ -f "$config_file" ] && [ "$copied" -gt 0 ]; then
-        local ru_plugins="routerai neuraldeep max routerai-imagegen neuraldeep-search"
+        local ru_plugins="model-providers/routerai model-providers/neuraldeep platforms/max backends/routerai-imagegen backends/neuraldeep-search"
         "$INSTALL_DIR/venv/bin/python" - "$config_file" "$ru_plugins" <<'PYEOF'
 import sys, re
 path, plugins_str = sys.argv[1], sys.argv[2].split()
@@ -2099,17 +2104,19 @@ with open(path, 'r') as f:
 if not re.search(r'^plugins:\s*$', content, re.MULTILINE):
     content = content.rstrip() + '\n\nplugins:\n  enabled: []\n'
 
-# Find enabled list and add missing plugins
+# Find enabled list and add missing plugins using 4-space item indent
+# (2 for "enabled:" + 2 for list items), matching Hermes config convention
+# and the Electron ru-plugins-bootstrap.ts ensurePluginsEnabled() regex.
 for p in plugins_str:
-    pattern = r'^  - ' + re.escape(p) + r'\s*$'
+    pattern = r'^    - ' + re.escape(p) + r'\s*$'
     if not re.search(pattern, content, re.MULTILINE):
-        # Replace 'enabled: []' → 'enabled:\n  - p'
+        # Replace 'enabled: []' → 'enabled:\n    - p'
         if re.search(r'enabled:\s*\[\]', content):
             content = re.sub(r'enabled:\s*\[\]', 'enabled:', content, count=1)
-            content = content.replace('  enabled:', '  enabled:\n  - ' + p, 1)
+            content = content.replace('  enabled:', '  enabled:\n    - ' + p, 1)
         else:
-            # Append after 'enabled:' line
-            content = re.sub(r'^(  enabled:)\s*$', r'\1\n  - ' + p, content, count=1, flags=re.MULTILINE)
+            # Append after 'enabled:' line with 4-space indent
+            content = re.sub(r'^(  enabled:)\s*$', r'\1\n    - ' + p, content, count=1, flags=re.MULTILINE)
 
 with open(path, 'w') as f:
     f.write(content)
