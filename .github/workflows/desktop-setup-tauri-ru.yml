@@ -5,9 +5,18 @@ on:
     tags:
       - 'v*-ru-setup.*'
   workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref to build (branch/tag/sha)'
+        required: false
+        default: ''
 
 permissions:
   contents: write
+
+concurrency:
+  group: desktop-tauri-ru-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -15,11 +24,17 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Checkout (with submodules)
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
+      - name: Checkout (manual clone — no actions/* downloads)
+        run: |
+          set -euo pipefail
+          REF="${{ inputs.ref || github.ref }}"
+          REF_NAME="${REF#refs/heads/}"
+          REF_NAME="${REF_NAME#refs/tags/}"
+          echo "Cloning ref: $REF_NAME"
+          # Self-hosted runner workspace may have leftovers from previous runs.
+          find . -mindepth 1 -delete 2>/dev/null || true
+          git clone --depth 1 --branch "$REF_NAME" "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" .
+          git submodule update --init --recursive --depth 1
 
       - name: Install Rust toolchain (if missing)
         run: |
@@ -27,7 +42,6 @@ jobs:
             echo "Rust not found — installing via rustup..."
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
             source "$HOME/.cargo/env"
-            # Add to PATH for subsequent steps
             echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           else
             echo "Rust already installed: $(rustc --version)"
@@ -42,12 +56,14 @@ jobs:
 
       - name: Verify Node version
         run: |
-          NODE_MAJOR=$(node --version | sed 's/v\([0-9]*\)\..*/\1/')
-          echo "Node: $(node --version) (major: $NODE_MAJOR)"
+          node --version
+          npm --version
+          NODE_MAJOR=$(node -e "console.log(process.versions.node.split('.')[0])")
           if [ "$NODE_MAJOR" -lt 20 ]; then
-            echo "ERROR: Node 20+ required, got $(node --version)"
+            echo "::error::Node 20+ required, got $(node --version)"
             exit 1
           fi
+          echo "✓ Node $NODE_MAJOR OK"
 
       - name: Install bootstrap-installer deps
         run: |
@@ -63,13 +79,10 @@ jobs:
         run: |
           cd apps/bootstrap-installer
           # Pin to the EXACT commit SHA — immutable URL avoids GitHub raw cache staleness.
-          # raw.githubusercontent.com/temga/hermes-agent/<SHA>/scripts/install.sh
-          # is cached forever (immutable), unlike /main/ which can lag.
           export HERMES_BUILD_PIN_COMMIT="$GITHUB_SHA"
           echo "Pinning installer to commit $HERMES_BUILD_PIN_COMMIT"
           npm run tauri:build
         env:
-          # Tauri needs to know the app is not in dev mode
           TAURI_ENV_PLATFORM: darwin
 
       - name: Find and rename DMG
@@ -81,39 +94,47 @@ jobs:
             find apps/bootstrap-installer/src-tauri/target/release/bundle -type f 2>/dev/null || true
             exit 1
           fi
-          # Rename to a clean name for the release
           RENAMED="apps/bootstrap-installer/src-tauri/target/release/bundle/dmg/Hermes-Setup-RU.dmg"
           cp "$DMG" "$RENAMED"
           echo "dmg_path=$RENAMED" >> "$GITHUB_OUTPUT"
           echo "Found: $DMG → $RENAMED"
+          ls -lh "$RENAMED"
 
-      - name: Upload DMG artifact (best-effort)
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: hermes-setup-ru-dmg
-          path: ${{ steps.find_dmg.outputs.dmg_path }}
-          retention-days: 7
-
-      - name: Release (on tag push)
+      - name: Create GitHub Release (on tag push, via gh CLI)
         if: startsWith(github.ref, 'refs/tags/v') && always()
-        uses: softprops/action-gh-release@v2
-        with:
-          files: ${{ steps.find_dmg.outputs.dmg_path }}
-          draft: true
-          name: ${{ github.ref_name }}
-          body: |
-            ## Hermes Setup — RU Edition (Tauri installer, ~11MB)
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/}"
+          DMG="${{ steps.find_dmg.outputs.dmg_path }}"
+          echo "Creating release for tag: $TAG"
 
-            Tauri-based installer that downloads and installs Hermes Agent + RU plugins on first launch.
+          BODY=$(cat <<'EOF'
+          ## Hermes Setup — RU Edition (Tauri installer, ~7MB)
 
-            ### Install
-            1. Download Hermes-Setup-RU.dmg
-            2. Open, drag Hermes to Applications
-            3. `xattr -cr /Applications/Hermes.app`
-            4. Launch — installer will download Hermes Agent + RU plugins automatically
+          Lightweight Tauri installer that downloads and installs Hermes Agent + RU plugins on first launch.
 
-            ### What it does
-            - Downloads `install.sh` from `temga/hermes-agent`
-            - Runs stages: prerequisites → repository → venv → python-deps → node-deps → path → config → **ru-plugins** → setup → gateway → desktop → complete
-            - `ru-plugins` stage: clones `temga/hermes-ru-ecosystem`, copies plugins to `~/.hermes/plugins/`
+          ### Install
+          1. Download `Hermes-Setup-RU.dmg`
+          2. Open, drag Hermes to Applications
+          3. `xattr -cr /Applications/Hermes.app`
+          4. Launch — installer will download Hermes Agent + RU plugins automatically
+
+          ### What it does
+          - Downloads `install.sh` from `temga/hermes-agent`
+          - Runs stages: prerequisites → repository → venv → python-deps → node-deps → path → config → **ru-plugins** → setup → gateway → desktop → complete
+          - `ru-plugins` stage: clones `temga/hermes-ru-ecosystem`, copies plugins to `~/.hermes/plugins/`
+          EOF
+          )
+
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft \
+            --title "$TAG" \
+            --notes "$BODY" \
+            "$DMG" || \
+          gh release upload "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber \
+            "$DMG"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
