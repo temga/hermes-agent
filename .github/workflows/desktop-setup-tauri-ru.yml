@@ -75,7 +75,7 @@ jobs:
           cd apps/bootstrap-installer
           npm run build
 
-      - name: Build Tauri DMG
+      - name: Build Tauri DMG (signed + notarized)
         run: |
           cd apps/bootstrap-installer
           # Pin to the EXACT commit SHA — immutable URL avoids GitHub raw cache staleness.
@@ -84,37 +84,34 @@ jobs:
           npm run tauri:build
         env:
           TAURI_ENV_PLATFORM: darwin
+          # Code signing — Apple Developer ID Application certificate (base64 .p12).
+          # Tauri reads APPLE_CERTIFICATE + APPLE_CERTIFICATE_PASSWORD to import
+          # the cert into a temporary keychain, then signs with it.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          # Notarization — App Store Connect API key (JWT auth, no app-specific password needed).
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
-      - name: Strip adhoc signature and rebuild unsigned DMG
+      - name: Find and rename DMG
         id: find_dmg
         run: |
-          set -euo pipefail
-          # Tauri always adhoc-signs on macOS (identity "-") when no Developer ID
-          # certificate is configured. On macOS Sequoia/Sonoma, adhoc + quarantine
-          # = "app is damaged" error. Removing the signature makes it truly unsigned,
-          # which gives a better UX: "unidentified developer" → right-click → Open.
-          APP=$(find apps/bootstrap-installer/src-tauri/target/release/bundle/macos -name "*.app" -type d | head -1)
-          if [ -z "$APP" ]; then
-            echo "ERROR: No .app found"
+          DMG=$(find apps/bootstrap-installer/src-tauri/target/release/bundle/dmg -name "*.dmg" -type f 2>/dev/null | head -1)
+          if [ -z "$DMG" ]; then
+            echo "ERROR: No DMG found"
             find apps/bootstrap-installer/src-tauri/target/release/bundle -type f 2>/dev/null || true
             exit 1
           fi
-          echo "Found app: $APP"
-
-          # Remove adhoc signature → truly unsigned
-          codesign --remove-signature "$APP"
-          echo "Signature removed. Verifying..."
-          codesign -dv --verbose=4 "$APP" 2>&1 || echo "(expected: no signature found)"
-
-          # Create fresh DMG from the unsigned .app
-          DMG_DIR="apps/bootstrap-installer/src-tauri/target/release/bundle/dmg"
-          mkdir -p "$DMG_DIR"
-          RENAMED="$DMG_DIR/Hermes-Setup-RU.dmg"
-          rm -f "$RENAMED"
-          hdiutil create -volname "Hermes" -srcfolder "$APP" -ov -format UDZO "$RENAMED"
+          RENAMED="apps/bootstrap-installer/src-tauri/target/release/bundle/dmg/Hermes-Setup-RU.dmg"
+          cp "$DMG" "$RENAMED"
           echo "dmg_path=$RENAMED" >> "$GITHUB_OUTPUT"
-          echo "Created unsigned DMG:"
+          echo "Found: $DMG → $RENAMED"
           ls -lh "$RENAMED"
+          # Verify signature
+          echo "=== Signature verification ==="
+          codesign -dv --verbose=4 "$RENAMED" 2>&1 || true
 
       - name: Create GitHub Release (on tag push, via gh CLI)
         if: startsWith(github.ref, 'refs/tags/v') && always()
@@ -132,8 +129,8 @@ jobs:
           ### Install
           1. Download `Hermes-Setup-RU.dmg`
           2. Open, drag Hermes to Applications
-          3. Right-click → Open (first launch only — unsigned, not notarized)
-          4. Launch — installer will download Hermes Agent + RU plugins automatically
+          3. Launch — installer will download Hermes Agent + RU plugins automatically
+          4. No Gatekeeper warnings — signed with Developer ID + notarized by Apple
 
           ### What it does
           - Downloads `install.sh` from `temga/hermes-agent`
