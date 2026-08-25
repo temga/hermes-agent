@@ -546,7 +546,8 @@ class TestHasAnyProviderConfigured:
         assert _has_any_provider_configured() is False
 
     def test_config_provider_counts(self, monkeypatch, tmp_path):
-        """config.yaml with model.provider set should count as configured."""
+        """config.yaml with model.provider set should count as configured
+        when the corresponding API key is in the environment."""
         import yaml
         from hermes_cli import config as config_module
         hermes_home = tmp_path / ".hermes"
@@ -558,10 +559,12 @@ class TestHasAnyProviderConfigured:
         monkeypatch.setattr(config_module, "get_env_path", lambda: hermes_home / ".env")
         monkeypatch.setattr(config_module, "get_hermes_home", lambda: hermes_home)
         monkeypatch.setenv("HERMES_HOME", str(hermes_home))
-        # Clear all provider env vars
-        for var in ("OPENROUTER_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
+        # Clear all provider env vars except the one we set
+        for var in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY",
                      "ANTHROPIC_TOKEN", "OPENAI_BASE_URL"):
             monkeypatch.delenv(var, raising=False)
+        # Provider is set in config AND the key exists in env → configured
+        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
         from hermes_cli.main import _has_any_provider_configured
         assert _has_any_provider_configured() is True
 
@@ -588,8 +591,8 @@ class TestHasAnyProviderConfigured:
         return hermes_home
 
     def test_config_provider_skips_registry_sweep(self, monkeypatch, tmp_path):
-        """model.provider in config.yaml must short-circuit BEFORE the slow
-        provider-registry sweep (gh subprocess etc.) is ever invoked.
+        """model.provider + matching API key in config.yaml must short-circuit
+        BEFORE the slow provider-registry sweep (gh subprocess etc.) is invoked.
 
         Regression test for the auth-first ordering: get_auth_status is
         booby-trapped to fail loudly if the sweep runs. The sweep wraps its
@@ -601,6 +604,8 @@ class TestHasAnyProviderConfigured:
         (hermes_home / "config.yaml").write_text(yaml.dump({
             "model": {"default": "anthropic/claude-opus-4.6", "provider": "openrouter"},
         }))
+        # Set the API key in env so the provider is actually configured
+        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
         sweep_calls = []
 
         def _trap(provider_id):
@@ -638,6 +643,70 @@ class TestHasAnyProviderConfigured:
         assert sweep_calls == [], (
             f"provider registry sweep ran before config short-circuit: {sweep_calls}"
         )
+
+    def test_bifrost_provider_without_key_is_not_configured(self, monkeypatch, tmp_path):
+        """Bifrost provider + base_url in config but NO BIFROST_API_KEY anywhere
+        must NOT count as configured — install.sh / bifrost-plugins-bootstrap.ts
+        set provider+base_url at install time, before the user has entered a key.
+        Onboarding must still appear so the user can enter their sk-bf-* key.
+        """
+        import yaml
+        hermes_home = self._setup_home(monkeypatch, tmp_path)
+        (hermes_home / "config.yaml").write_text(yaml.dump({
+            "model": {
+                "default": "neuraldeep/gpt-oss-120b",
+                "provider": "bifrost",
+                "base_url": "https://router.rove-ai.ru/v1",
+            },
+        }))
+        # Prevent provider-specific auth fallbacks (e.g. gh auth on the test
+        # machine) from short-circuiting to True. We are testing the config-only
+        # path: provider+base_url without a key must NOT count as configured.
+        monkeypatch.setattr("hermes_cli.auth.get_auth_status", lambda _pid: {})
+        # Ensure bifrost is in PROVIDER_REGISTRY even if the plugin isn't
+        # installed in the test's tmp HERMES_HOME (auto-extend only runs when
+        # the plugin directory exists).
+        self._ensure_bifrost_in_registry(monkeypatch)
+        # BIFROST_API_KEY is cleared by _clear_provider_env
+        from hermes_cli.main import _has_any_provider_configured
+        assert _has_any_provider_configured() is False
+
+    def test_bifrost_provider_with_key_is_configured(self, monkeypatch, tmp_path):
+        """Bifrost provider + BIFROST_API_KEY in env → configured."""
+        import yaml
+        hermes_home = self._setup_home(monkeypatch, tmp_path)
+        (hermes_home / "config.yaml").write_text(yaml.dump({
+            "model": {
+                "default": "neuraldeep/gpt-oss-120b",
+                "provider": "bifrost",
+                "base_url": "https://router.rove-ai.ru/v1",
+            },
+        }))
+        monkeypatch.setenv("BIFROST_API_KEY", "sk-bf-test")
+        monkeypatch.setattr("hermes_cli.auth.get_auth_status", lambda _pid: {})
+        self._ensure_bifrost_in_registry(monkeypatch)
+        from hermes_cli.main import _has_any_provider_configured
+        assert _has_any_provider_configured() is True
+
+    @staticmethod
+    def _ensure_bifrost_in_registry(monkeypatch):
+        """Add bifrost to PROVIDER_REGISTRY if auto-extend hasn't run.
+
+        In the test environment HERMES_HOME is a tmp dir with no plugins,
+        so the bifrost plugin never loads and PROVIDER_REGISTRY lacks the
+        entry. _has_any_provider_configured() needs the entry to resolve
+        api_key_env_vars for the configured provider.
+        """
+        from hermes_cli.auth import PROVIDER_REGISTRY, ProviderConfig
+        if "bifrost" not in PROVIDER_REGISTRY:
+            PROVIDER_REGISTRY["bifrost"] = ProviderConfig(
+                id="bifrost",
+                name="Bifrost Gateway",
+                auth_type="api_key",
+                inference_base_url="https://router.rove-ai.ru/v1",
+                api_key_env_vars=("BIFROST_API_KEY",),
+                base_url_env_var="",
+            )
 
     def test_auth_json_skips_registry_sweep(self, monkeypatch, tmp_path):
         """auth.json with a logged-in active provider must short-circuit before

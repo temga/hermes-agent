@@ -1085,7 +1085,25 @@ def _has_any_provider_configured() -> bool:
         cfg_provider = (model_cfg.get("provider") or "").strip()
         cfg_base_url = (model_cfg.get("base_url") or "").strip()
         cfg_api_key = (model_cfg.get("api_key") or "").strip()
-        if cfg_provider or cfg_base_url or cfg_api_key:
+        # For the "custom" provider (local/self-hosted endpoints), base_url
+        # alone is sufficient — many local servers need no key. For registered
+        # api-key providers (bifrost, openrouter, etc.), provider+base_url
+        # without an api_key in config means the key must be in .env — if it
+        # isn't there, the provider is NOT actually configured (install.sh /
+        # bifrost-plugins-bootstrap.ts set provider+base_url at install time,
+        # before the user has entered any key).
+        if cfg_provider == "custom" or cfg_api_key:
+            if cfg_provider or cfg_base_url or cfg_api_key:
+                return True
+        elif cfg_provider:
+            # Registered provider with no inline api_key — check env vars.
+            _pconfig = PROVIDER_REGISTRY.get(cfg_provider.lower())
+            if _pconfig and _pconfig.api_key_env_vars:
+                if any(os.getenv(v) for v in _pconfig.api_key_env_vars):
+                    return True
+            # Fall through: provider set but no key found anywhere yet.
+        elif cfg_base_url:
+            # base_url without provider (legacy custom endpoint) — still counts.
             return True
 
     # Check provider-specific auth fallbacks (for example, Copilot via gh auth).

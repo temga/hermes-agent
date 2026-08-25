@@ -25,6 +25,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { execFileSync } from 'node:child_process'
 
 import { app } from 'electron'
 
@@ -223,6 +224,95 @@ function writeStamp(hermesHome: string): void {
 }
 
 /**
+ * Configure all service providers to use Bifrost in config.yaml.
+ * Mirrors install_bifrost_plugins() in scripts/install.sh:
+ *   model.provider, model.default, model.base_url
+ *   image_gen.provider
+ *   web.search_backend, web.extract_backend
+ *   stt.provider, stt.bifrost.model, stt.bifrost.language
+ *   tts.provider, tts.bifrost.model
+ *
+ * Uses the venv Python (available at this point in startup) to do a proper
+ * YAML-aware edit via hermes_cli.config — no fragile text regex.
+ * Non-fatal: a failure logs but never blocks startup.
+ */
+function configureServiceProviders(hermesHome: string, log: (msg: string) => void): void {
+  const configPath = path.join(hermesHome, 'config.yaml')
+  if (!fs.existsSync(configPath)) {
+    log('config.yaml not found — skipping service provider configuration')
+
+    return
+  }
+
+  // Resolve venv Python. VENV_ROOT is <hermesHome>/hermes-agent/venv — same
+  // path main.ts uses (ACTIVE_HERMES_ROOT / VENV_ROOT). We resolve it here
+  // to avoid importing Electron-specific constants that aren't available
+  // in the test environment.
+  const hermesRoot = path.join(hermesHome, 'hermes-agent')
+  const venvPython = process.platform === 'win32'
+    ? path.join(hermesRoot, 'venv', 'Scripts', 'python.exe')
+    : path.join(hermesRoot, 'venv', 'bin', 'python')
+
+  if (!fs.existsSync(venvPython)) {
+    log(`venv Python not found at ${venvPython} — skipping service provider configuration`)
+
+    return
+  }
+
+  const script = `
+import sys
+from hermes_cli.config import load_config, save_config
+
+cfg = load_config()
+
+# model: provider + default + base_url
+# base_url MUST point at the Bifrost gateway — the template's openrouter.ai
+# URL is stale and produces 403 at runtime.
+model = cfg.setdefault('model', {})
+model['provider'] = 'bifrost'
+model['default'] = 'neuraldeep/gpt-oss-120b'
+model['base_url'] = 'https://router.rove-ai.ru/v1'
+
+# image_gen: provider
+img = cfg.setdefault('image_gen', {})
+img['provider'] = 'bifrost'
+
+# web: search + extract backends
+web = cfg.setdefault('web', {})
+web['search_backend'] = 'bifrost'
+web['extract_backend'] = 'bifrost'
+
+# stt: provider + bifrost config (language: ru is critical)
+stt = cfg.setdefault('stt', {})
+stt['provider'] = 'bifrost'
+stt_bf = stt.setdefault('bifrost', {})
+stt_bf['model'] = 'neuraldeep/whisper-podlodka-turbo'
+stt_bf['language'] = 'ru'
+
+# tts: provider + bifrost config
+tts = cfg.setdefault('tts', {})
+tts['provider'] = 'bifrost'
+tts_bf = tts.setdefault('bifrost', {})
+tts_bf['model'] = 'espeech-tts'
+
+save_config(cfg, merge_existing=True)
+print("Configured all service providers → bifrost")
+`
+
+  try {
+    const output = execFileSync(venvPython, ['-c', script], {
+      cwd: hermesRoot,
+      timeout: 15000,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+    log(output.trim() || 'Service providers configured → bifrost')
+  } catch (err) {
+    log(`Failed to configure service providers: ${(err as Error).message}`)
+  }
+}
+
+/**
  * Install bundled Bifrost plugins into ~/.hermes/plugins/ and enable them in
  * config.yaml. Safe to call on every launch — no-op once stamp exists.
  */
@@ -282,6 +372,16 @@ export async function ensureBifrostPlugins(
       log(`Enabled ${installed} Bifrost plugins in config.yaml`)
     } catch (err) {
       log(`Failed to update config.yaml: ${(err as Error).message} — plugins copied but not enabled`)
+    }
+
+    // Configure all service providers (model, image_gen, web, stt, tts) to
+    // use Bifrost. Without this, the template's openrouter.ai base_url stays
+    // in config.yaml and LLM requests fail with 403. Mirrors
+    // install_bifrost_plugins() in scripts/install.sh.
+    try {
+      configureServiceProviders(hermesHome, log)
+    } catch (err) {
+      log(`Failed to configure service providers: ${(err as Error).message}`)
     }
 
     writeStamp(hermesHome)

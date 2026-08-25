@@ -2130,10 +2130,15 @@ from hermes_cli.config import load_config, save_config
 
 cfg = load_config()
 
-# model: provider + default
+# model: provider + default + base_url
+# base_url MUST point at the Bifrost gateway — the template's
+# openrouter.ai URL is stale and produces 403 at runtime because
+# _keyresolver.py only resolves the key when the URL host matches
+# router.rove-ai.ru.
 model = cfg.setdefault('model', {})
 model['provider'] = 'bifrost'
 model['default'] = 'neuraldeep/gpt-oss-120b'
+model['base_url'] = 'https://router.rove-ai.ru/v1'
 
 # image_gen: provider
 img = cfg.setdefault('image_gen', {})
