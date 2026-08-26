@@ -456,7 +456,12 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
   // provider refresh may flip back to 'oauth'); it preselects the local option
   // and hides the "back to sign in" link since the user came specifically to
   // configure a custom endpoint.
-  if (localEndpoint || mode === 'apikey' || !hasOauth) {
+  //
+  // Don't flip to the API-key form when providers haven't loaded yet
+  // (providers === null). An empty array (hasOauth=false) during the initial
+  // async fetch would otherwise flash the full API-key catalog before the
+  // OAuth picker (Bifrost + Nous) renders — the "double screen" bug.
+  if (localEndpoint || mode === 'apikey' || (providers !== null && !hasOauth)) {
     return (
       <div className="grid gap-3">
         <ApiKeyForm

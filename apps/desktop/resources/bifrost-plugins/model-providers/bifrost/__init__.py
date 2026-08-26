@@ -43,6 +43,8 @@ _DEFAULT_BASE_URL = os.environ.get("BIFROST_BASE_URL", "https://router.rove-ai.r
 # across 4 upstream providers). Users can set any model id in config.yaml
 # and it will be passed through to the gateway.
 _FALLBACK_MODELS = (
+    # turbocloud — default chat model for the Bifrost edition
+    "turbocloud/GLM-5.2",
     # neuraldeep — reasoning + noreason variants
     "neuraldeep/gpt-oss-120b",
     "neuraldeep/qwen3.6-35b-a3b",
@@ -56,8 +58,6 @@ _FALLBACK_MODELS = (
     # tropass
     "tropass/GLM-5.2",
     "tropass/Qwen3.5-397B-A17B-FP8",
-    # turbocloud
-    "turbocloud/GLM-5.2",
 )
 
 bifrost = ProviderProfile(

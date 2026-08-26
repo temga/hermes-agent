@@ -270,7 +270,7 @@ cfg = load_config()
 # URL is stale and produces 403 at runtime.
 model = cfg.setdefault('model', {})
 model['provider'] = 'bifrost'
-model['default'] = 'neuraldeep/gpt-oss-120b'
+model['default'] = 'turbocloud/GLM-5.2'
 model['base_url'] = 'https://router.rove-ai.ru/v1'
 
 # image_gen: provider
