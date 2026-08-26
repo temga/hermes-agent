@@ -3172,6 +3172,173 @@ function Write-BootstrapMarker {
     Write-Success "Bootstrap marker written: $markerPath"
 }
 
+# BIFROST-EDITION: install Bifrost Gateway plugins (LLM, image gen, web, STT, TTS)
+# Clones temga/hermes-plugin-bifrost-gateway and copies 5 plugin directories
+# into $HermesHome\plugins\, enables them in config.yaml, and sets all service
+# providers to "bifrost" so one sk-bf-* key powers everything.
+# Mirrors install_bifrost_plugins() in install.sh.
+function Install-BifrostPlugins {
+    $pluginsDir = Join-Path $HermesHome "plugins"
+    $bfRepoUrl  = "https://github.com/temga/hermes-plugin-bifrost-gateway.git"
+    $bfCloneDir = Join-Path $HermesHome ".bifrost-cache"
+    $bfStamp    = Join-Path $pluginsDir ".bifrost-plugins-stamp"
+
+    Write-Info "Installing Bifrost Gateway plugins..."
+
+    # Idempotency: skip if already installed and stamp is fresh
+    if ((Test-Path $bfStamp) -and (Test-Path $pluginsDir)) {
+        Write-Info "Bifrost plugins already installed (stamp found), skipping"
+        return
+    }
+
+    New-Item -ItemType Directory -Force -Path $pluginsDir | Out-Null
+
+    # Clone (or update) the Bifrost plugin repo
+    if ((Test-Path (Join-Path $bfCloneDir ".git"))) {
+        Write-Info "Updating Bifrost plugin cache..."
+        & git -C $bfCloneDir pull --ff-only 2>&1 | Out-Null
+    } else {
+        Write-Info "Cloning Bifrost plugin pack..."
+        if (Test-Path $bfCloneDir) { Remove-Item -Recurse -Force $bfCloneDir }
+        & git clone --depth 1 $bfRepoUrl $bfCloneDir 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Err "Failed to clone Bifrost plugins — they will not be available"
+            Write-Info "You can install them manually later from $bfRepoUrl"
+            return  # non-fatal
+        }
+    }
+
+    # Plugin list: category/name (mirrors install.sh in hermes-plugin-bifrost-gateway)
+    $bfPlugins = @(
+        "model-providers/bifrost"
+        "image_gen/bifrost"
+        "web/bifrost"
+        "transcription/bifrost"
+        "tts/bifrost"
+    )
+
+    $copied = 0
+    foreach ($pluginPath in $bfPlugins) {
+        $srcDir = Join-Path $bfCloneDir $pluginPath
+        $dest   = Join-Path $pluginsDir $pluginPath
+
+        $pluginYaml = Join-Path $srcDir "plugin.yaml"
+        if (-not (Test-Path $pluginYaml)) {
+            Write-Err "Source not found: $pluginYaml"
+            continue
+        }
+
+        $destParent = Split-Path $dest -Parent
+        New-Item -ItemType Directory -Force -Path $destParent | Out-Null
+        if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
+        Copy-Item -Recurse $srcDir $dest
+
+        # Clean up git artifacts
+        $gitDir = Join-Path $dest ".git"
+        if (Test-Path $gitDir) { Remove-Item -Recurse -Force $gitDir }
+        $pycache = Join-Path $dest "__pycache__"
+        if (Test-Path $pycache) { Remove-Item -Recurse -Force $pycache }
+
+        # Copy shared key resolver into every plugin directory
+        $keyResolver = Join-Path $bfCloneDir "_keyresolver.py"
+        if (Test-Path $keyResolver) {
+            Copy-Item $keyResolver (Join-Path $dest "_keyresolver.py")
+        }
+
+        $copied++
+        Write-Info "Installed plugin: $pluginPath"
+    }
+
+    # Enable plugins in config.yaml via Python (same approach as install.sh).
+    # Uses path-derived keys that match PluginManifest.key.
+    $configFile = Join-Path $HermesHome "config.yaml"
+    $venvPython = Join-Path $InstallDir "venv\Scripts\python.exe"
+
+    if ((Test-Path $configFile) -and $copied -gt 0 -and (Test-Path $venvPython)) {
+        $enableNames = $bfPlugins -join " "
+
+        # Configure all service providers to use Bifrost via hermes_cli.config
+        # (YAML-aware — no regex, no duplicate keys). One sk-bf-* key powers:
+        # LLM, image gen, web search, STT, TTS.
+        $configScript = @"
+import sys, re
+from hermes_cli.config import load_config, save_config
+
+path = r'$configFile'
+plugins_str = '$enableNames'.split()
+
+with open(path, 'r') as f:
+    content = f.read()
+
+# Ensure plugins section exists
+if not re.search(r'^plugins:\s*$', content, re.MULTILINE):
+    content = content.rstrip() + '\n\nplugins:\n  enabled: []\n'
+
+# Find enabled list and add missing plugins using 4-space item indent
+for p in plugins_str:
+    pattern = r'^    - ' + re.escape(p) + r'\s*$'
+    if not re.search(pattern, content, re.MULTILINE):
+        if re.search(r'enabled:\s*\[\]', content):
+            content = re.sub(r'enabled:\s*\[\]', 'enabled:', content, count=1)
+            content = content.replace('  enabled:', '  enabled:\n    - ' + p, 1)
+        else:
+            content = re.sub(r'^(  enabled:)\s*$', r'\1\n    - ' + p, content, count=1, flags=re.MULTILINE)
+
+with open(path, 'w') as f:
+    f.write(content)
+print(f"Enabled Bifrost plugins: {', '.join(plugins_str)}")
+
+# Configure all service providers to use Bifrost
+cfg = load_config()
+
+# model: provider + default + base_url
+# base_url MUST point at the Bifrost gateway — the template's
+# openrouter.ai URL is stale and produces 403 at runtime because
+# _keyresolver.py only resolves the key when the URL host matches
+# router.rove-ai.ru.
+model = cfg.setdefault('model', {})
+model['provider'] = 'bifrost'
+model['default'] = 'turbocloud/GLM-5.2'
+model['base_url'] = 'https://router.rove-ai.ru/v1'
+
+# image_gen: provider
+img = cfg.setdefault('image_gen', {})
+img['provider'] = 'bifrost'
+
+# web: search + extract backends
+web = cfg.setdefault('web', {})
+web['search_backend'] = 'bifrost'
+web['extract_backend'] = 'bifrost'
+
+# stt: provider + bifrost config (language: ru is critical — global default is "en")
+stt = cfg.setdefault('stt', {})
+stt['provider'] = 'bifrost'
+stt_bf = stt.setdefault('bifrost', {})
+stt_bf['model'] = 'neuraldeep/whisper-podlodka-turbo'
+stt_bf['language'] = 'ru'
+
+# tts: provider + bifrost config
+tts = cfg.setdefault('tts', {})
+tts['provider'] = 'bifrost'
+tts_bf = tts.setdefault('bifrost', {})
+tts_bf['model'] = 'espeech-tts'
+
+save_config(cfg, merge_existing=True)
+print("Configured all service providers -> bifrost")
+"@
+
+        & $venvPython -c $configScript
+    }
+
+    # Write stamp
+    $stampDir = Split-Path $bfStamp -Parent
+    if (-not (Test-Path $stampDir)) { New-Item -ItemType Directory -Force -Path $stampDir | Out-Null }
+    (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ" -AsUTC) | Set-Content $bfStamp -NoNewline
+
+    Write-Success "Installed $copied Bifrost plugins to $HermesHome\plugins\"
+    Write-Info "One BIFROST_API_KEY (sk-bf-*) powers LLM + image gen + web + STT + TTS"
+}
+
 function Copy-ConfigTemplates {
     Write-Info "Setting up configuration files..."
     
@@ -4587,6 +4754,7 @@ if ($IncludeDesktop) {
 $InstallStages += @(
     @{ Name = "path";             Title = "Adding Hermes to PATH";                Category = "finalize";     NeedsUserInput = $false; Worker = "Stage-Path" }
     @{ Name = "config-templates"; Title = "Writing configuration templates";      Category = "finalize";     NeedsUserInput = $false; Worker = "Stage-ConfigTemplates" }
+    @{ Name = "bifrost-plugins";  Title = "Installing Bifrost Gateway plugins";   Category = "finalize";     NeedsUserInput = $false; Worker = "Stage-BifrostPlugins" }
     @{ Name = "platform-sdks";    Title = "Installing messaging platform SDKs";   Category = "finalize";     NeedsUserInput = $false; Worker = "Stage-PlatformSdks" }
     @{ Name = "bootstrap-marker"; Title = "Marking install complete";              Category = "finalize";     NeedsUserInput = $false; Worker = "Stage-BootstrapMarker" }
     # Interactive stages.  In non-interactive mode these become no-ops; the
@@ -4633,6 +4801,7 @@ function Stage-NodeDeps         { Install-NodeDeps }
 function Stage-Desktop          { Install-DesktopVoiceDeps; Install-Desktop }
 function Stage-Path             { Set-PathVariable }
 function Stage-ConfigTemplates  { Copy-ConfigTemplates }
+function Stage-BifrostPlugins   { Install-BifrostPlugins }
 function Stage-PlatformSdks     { Resolve-UvCmd; Install-PlatformSdks }
 function Stage-BootstrapMarker  { Write-BootstrapMarker }
 function Stage-Configure        { Invoke-SetupWizard }
