@@ -128,12 +128,49 @@ jobs:
           echo "=== Signature verification ==="
           codesign -dv --verbose=4 "$RENAMED" 2>&1 || true
 
-      - name: Upload DMG artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: hermes-setup-mac
-          path: ${{ steps.find_dmg.outputs.dmg_path }}
-          retention-days: 1
+      - name: Upload DMG to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/}"
+          DMG="${{ steps.find_dmg.outputs.dmg_path }}"
+
+          BODY='## Hermes Setup — Bifrost Edition (Tauri installer, ~7MB)
+
+          Lightweight Tauri installer that downloads and installs Hermes Agent + Bifrost Gateway plugins on first launch.
+          One key (sk-bf-*) powers LLM, image gen, web search, STT & TTS.
+
+          ### macOS
+          1. Download `Hermes-Setup-Bifrost.dmg`
+          2. Open, drag Hermes to Applications
+          3. Launch — installer will download Hermes Agent + Bifrost plugins automatically
+          4. On first launch of the desktop app, enter your Bifrost key (sk-bf-*)
+          5. No Gatekeeper warnings — signed with Developer ID + notarized by Apple
+
+          ### Windows
+          1. Download `Hermes-Setup-Bifrost.exe`
+          2. Run — SmartScreen may warn (unsigned installer); click "More info" → "Run anyway"
+          3. Installer will download Hermes Agent + Bifrost plugins automatically
+          4. On first launch of the desktop app, enter your Bifrost key (sk-bf-*)
+
+          ### What it does
+          - macOS: downloads `install.sh` from `temga/hermes-agent`
+          - Windows: runs `install.ps1` (bundled in the installer)
+          - Stages: prerequisites → repository → venv → python-deps → node-deps → path → config → **bifrost-plugins** → setup → gateway → desktop → complete
+          - `bifrost-plugins` stage: clones `temga/hermes-plugin-bifrost-gateway`, copies 5 plugins to `~/.hermes/plugins/`, configures all service providers → bifrost'
+
+          # Try to create the release; if it already exists (race with Windows job), upload instead.
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$TAG" \
+            --notes "$BODY" \
+            "$DMG" || \
+          gh release upload "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber \
+            "$DMG"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-windows:
     runs-on: windows-latest
@@ -192,89 +229,23 @@ jobs:
           echo "Found: $EXE → $RENAMED"
           ls -lh "$RENAMED"
 
-      - name: Upload EXE artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: hermes-setup-windows
-          path: ${{ steps.find_exe.outputs.exe_path }}
-          retention-days: 1
-
-  release:
-    needs: [build-mac, build-windows]
-    if: startsWith(github.ref, 'refs/tags/v') && always()
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: List artifacts
-        run: find artifacts -type f -ls
-
-      - name: Create GitHub Release
+      - name: Upload EXE to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
         run: |
           set -euo pipefail
           TAG="${GITHUB_REF#refs/tags/}"
-          echo "Creating release for tag: $TAG"
+          EXE="${{ steps.find_exe.outputs.exe_path }}"
 
-          DMG=$(find artifacts/hermes-setup-mac -name "*.dmg" -type f | head -1)
-          EXE=$(find artifacts/hermes-setup-windows -name "*.exe" -type f | head -1)
-
-          echo "DMG: $DMG"
-          echo "EXE: $EXE"
-
-          BODY=$(cat <<'EOF'
-          ## Hermes Setup — Bifrost Edition (Tauri installer, ~7MB)
-
-          Lightweight Tauri installer that downloads and installs Hermes Agent + Bifrost Gateway plugins on first launch.
-          One key (sk-bf-*) powers LLM, image gen, web search, STT & TTS.
-
-          ### macOS
-          1. Download `Hermes-Setup-Bifrost.dmg`
-          2. Open, drag Hermes to Applications
-          3. Launch — installer will download Hermes Agent + Bifrost plugins automatically
-          4. On first launch of the desktop app, enter your Bifrost key (sk-bf-*)
-          5. No Gatekeeper warnings — signed with Developer ID + notarized by Apple
-
-          ### Windows
-          1. Download `Hermes-Setup-Bifrost.exe`
-          2. Run — SmartScreen may warn (unsigned installer); click "More info" → "Run anyway"
-          3. Installer will download Hermes Agent + Bifrost plugins automatically
-          4. On first launch of the desktop app, enter your Bifrost key (sk-bf-*)
-
-          ### What it does
-          - macOS: downloads `install.sh` from `temga/hermes-agent`
-          - Windows: runs `install.ps1` (bundled in the installer)
-          - Stages: prerequisites → repository → venv → python-deps → node-deps → path → config → **bifrost-plugins** → setup → gateway → desktop → complete
-          - `bifrost-plugins` stage: clones `temga/hermes-plugin-bifrost-gateway`, copies 5 plugins to `~/.hermes/plugins/`, configures all service providers → bifrost
-          EOF
-          )
-
-          # Create release with whatever artifacts are available
-          UPLOAD_ARGS=""
-          if [ -n "$DMG" ] && [ -f "$DMG" ]; then
-            UPLOAD_ARGS="$UPLOAD_ARGS $DMG"
-          fi
-          if [ -n "$EXE" ] && [ -f "$EXE" ]; then
-            UPLOAD_ARGS="$UPLOAD_ARGS $EXE"
-          fi
-
-          if [ -z "$UPLOAD_ARGS" ]; then
-            echo "ERROR: No installers found"
-            exit 1
-          fi
-
+          # Try to create the release; if it already exists (race with Mac job), upload instead.
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --title "$TAG" \
-            --notes "$BODY" \
-            $UPLOAD_ARGS || \
+            --notes "Hermes Setup — Bifrost Edition (Tauri installer)" \
+            "$EXE" || \
           gh release upload "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --clobber \
-            $UPLOAD_ARGS
+            "$EXE"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
