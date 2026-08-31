@@ -162,7 +162,7 @@ jobs:
           # Try to create the release; if it already exists (race with Windows job), upload instead.
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
-            --title "$TAG" \
+            --title "Hermes Bifrost Edition — $TAG" \
             --notes "$BODY" \
             "$DMG" || \
           gh release upload "$TAG" \
@@ -240,7 +240,7 @@ jobs:
           # Try to create the release; if it already exists (race with Mac job), upload instead.
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
-            --title "$TAG" \
+            --title "Hermes Bifrost Edition — $TAG" \
             --notes "Hermes Setup — Bifrost Edition (Tauri installer)" \
             "$EXE" || \
           gh release upload "$TAG" \

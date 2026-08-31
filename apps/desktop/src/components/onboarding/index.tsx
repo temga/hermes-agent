@@ -293,9 +293,17 @@ export function DesktopOnboardingOverlay({
   // (those are surfaced by FlowPanel, not as a banner).
   const rawReason = onboarding.reason?.trim() || null
 
+  // Bifrost edition: suppress the credential-warning banner entirely. The
+  // provider picker (Bifrost row first) is self-explanatory — a "no API key
+  // configured" notice above it is noise, not signal.
+  const isBifrostKeyWarning =
+    rawReason !== null &&
+    /bifrost|BIFROST_API_KEY/i.test(rawReason)
+
   const reason =
     rawReason &&
     !isProviderSetupErrorMessage(rawReason) &&
+    !isBifrostKeyWarning &&
     rawReason !== DEFAULT_ONBOARDING_REASON &&
     rawReason !== DEFAULT_MANUAL_ONBOARDING_REASON
       ? rawReason
