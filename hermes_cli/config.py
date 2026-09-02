@@ -601,6 +601,25 @@ def recommended_update_command() -> str:
     return recommended_update_command_for_method(method)
 
 
+def get_configured_update_branch() -> str:
+    """Return the configured update branch (``updates.branch`` in config.yaml).
+
+    Default is ``"main"``. Forks or custom deployments that track a different
+    branch set this so every update consumer (``hermes update``, ``--check``,
+    the banner's behind-count, the dashboard) compares against the same branch
+    without needing ``--branch`` on every invocation.
+    """
+    try:
+        cfg = load_config()
+        raw = (cfg or {}).get("updates", {}).get("branch", "main")
+        if not isinstance(raw, str):
+            return "main"
+        branch = raw.strip()
+        return branch or "main"
+    except Exception:
+        return "main"
+
+
 # Long-form text for ``hermes update`` / ``--check`` when running inside the
 # Docker image.  Surfaced by ``cmd_update`` and ``_cmd_update_check`` in
 # hermes_cli/main.py; lives here so the wording stays consistent and we

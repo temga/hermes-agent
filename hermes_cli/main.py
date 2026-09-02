@@ -10294,8 +10294,17 @@ def _resolve_update_branch(args) -> str:
     or whitespace-only values as the default" parsing so every consumer of
     ``--branch`` (check path, git-update path, ZIP-fallback path) agrees on
     the same answer.
+
+    When ``--branch`` is not passed, falls back to ``updates.branch`` in
+    config.yaml (default ``"main"``) so forks/custom deployments tracking a
+    different branch don't need ``--branch`` on every invocation.
     """
-    return (getattr(args, "branch", None) or "main").strip() or "main"
+    cli_branch = getattr(args, "branch", None)
+    if cli_branch:
+        return cli_branch.strip() or "main"
+    from hermes_cli.config import get_configured_update_branch
+
+    return get_configured_update_branch()
 
 
 def _size_delta_label(saved_mb: float) -> str:

@@ -4905,17 +4905,23 @@ async def update_hermes():
 
 
 def _recent_upstream_commits(n: int = 20) -> List[Dict[str, Any]]:
-    """Commits the local checkout is behind ``origin/main`` by, newest first.
+    """Commits the local checkout is behind ``origin/<updates.branch>`` by, newest first.
 
-    Logs the SAME range the behind-count uses (``HEAD..origin/main`` — see
+    Logs the SAME range the behind-count uses (``HEAD..origin/<branch>`` — see
     ``banner._check_via_local_git``), NOT the branch's ``@{upstream}``. On a
     feature-branch checkout ``@{upstream}`` is the branch's own tip (zero
     commits), which would leave the changelog empty even though the count is
-    non-zero. Pinning to ``origin/main`` keeps count and changelog consistent.
+    non-zero. Pinning to ``origin/<branch>`` keeps count and changelog consistent.
 
-    Best-effort: returns [] if not a git checkout, origin/main is unreachable,
+    Best-effort: returns [] if not a git checkout, origin/<branch> is unreachable,
     or git is unavailable. Never raises into the request path.
     """
+    try:
+        from hermes_cli.config import get_configured_update_branch
+        branch = get_configured_update_branch()
+    except Exception:
+        branch = "main"
+
     try:
         out = subprocess.run(
             [
@@ -4924,7 +4930,7 @@ def _recent_upstream_commits(n: int = 20) -> List[Dict[str, Any]]:
                 str(PROJECT_ROOT),
                 "log",
                 "--format=%H%x1f%s%x1f%an%x1f%ct",
-                "HEAD..origin/main",
+                f"HEAD..origin/{branch}",
                 f"-n{int(n)}",
             ],
             capture_output=True,

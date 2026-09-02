@@ -239,11 +239,17 @@ def _is_full_sha(value: Optional[str]) -> bool:
     )
 
 
-def _upstream_main_sha() -> Optional[str]:
-    """Tip SHA of upstream main via HTTPS ls-remote (no auth, no prompts)."""
+def _upstream_main_sha(branch: str = "main") -> Optional[str]:
+    """Tip SHA of ``refs/heads/<branch>`` on the upstream repo via HTTPS ls-remote.
+
+    No auth, no prompts. Only meaningful for branches that exist on the
+    upstream (NousResearch/hermes-agent) repository — a fork's custom
+    branch will simply return ``None`` here, which callers treat as
+    "skip the upstream probe".
+    """
     try:
         result = subprocess.run(
-            ["git", "ls-remote", _UPSTREAM_REPO_URL, "refs/heads/main"],
+            ["git", "ls-remote", _UPSTREAM_REPO_URL, f"refs/heads/{branch}"],
             capture_output=True, text=True, encoding="utf-8", errors="replace",
             timeout=10,
         )
@@ -255,14 +261,14 @@ def _upstream_main_sha() -> Optional[str]:
     return upstream_rev or None
 
 
-def _check_via_rev(local_rev: str) -> Optional[int]:
-    """Compare an embedded git revision to upstream main via ls-remote.
+def _check_via_rev(local_rev: str, branch: str = "main") -> Optional[int]:
+    """Compare an embedded git revision to ``refs/heads/<branch>`` on upstream.
 
     Returns 0 if up-to-date, the exact behind-count when the GitHub compare
     API can recover it, ``UPDATE_AVAILABLE_NO_COUNT`` if behind by an unknown
     amount, or ``None`` on failure.
     """
-    upstream_rev = _upstream_main_sha()
+    upstream_rev = _upstream_main_sha(branch)
     if not upstream_rev:
         return None
     if upstream_rev == local_rev:
@@ -275,8 +281,8 @@ def _check_via_rev(local_rev: str) -> Optional[int]:
     return counted if counted is not None else UPDATE_AVAILABLE_NO_COUNT
 
 
-def _check_via_local_git(repo_dir: Path) -> Optional[int]:
-    """Count commits behind origin/main in a local checkout."""
+def _check_via_local_git(repo_dir: Path, branch: str = "main") -> Optional[int]:
+    """Count commits behind ``origin/<branch>`` in a local checkout."""
     origin_url = _git_stdout(["remote", "get-url", "origin"], cwd=repo_dir)
     if _is_official_ssh_remote(origin_url):
         head_rev = _git_stdout(["rev-parse", "HEAD"], cwd=repo_dir)
@@ -287,7 +293,7 @@ def _check_via_local_git(repo_dir: Path) -> Optional[int]:
         # carried commit sitting AHEAD of origin/main, and misreporting an
         # ahead checkout as behind nudges the user into `hermes update`,
         # which can wipe their carried work.
-        upstream_rev = _upstream_main_sha()
+        upstream_rev = _upstream_main_sha(branch)
         if upstream_rev is None:
             return None
         if upstream_rev == head_rev:
@@ -310,7 +316,7 @@ def _check_via_local_git(repo_dir: Path) -> Optional[int]:
     # Installer checkouts are shallow (`git clone --depth 1`). On a shallow
     # clone the history stops at a single commit, so a plain `git fetch` would
     # unshallow the repo (dragging in the whole history) and
-    # `rev-list --count HEAD..origin/main` would report a huge bogus "behind"
+    # `rev-list --count HEAD..origin/<branch>` would report a huge bogus "behind"
     # number (e.g. "12492 commits behind"). Detect shallow up front: fetch with
     # --depth 1 to preserve the boundary and compare tip SHAs instead of
     # counting. Full clones (developers, Docker dev images) keep the exact
@@ -332,11 +338,11 @@ def _check_via_local_git(repo_dir: Path) -> Optional[int]:
         # An unscoped ``git fetch origin`` transfers every remote head (~1,400
         # on this repo — measured 3.0 s vs 0.55 s scoped) and can burn the full
         # 10 s timeout on slow links. ``cmd_update`` already scopes its fetch
-        # for the same reason. Modern git updates the ``origin/main`` tracking
-        # ref on a scoped fetch, so the ``HEAD..origin/main`` count below is
+        # for the same reason. Modern git updates the ``origin/<branch>`` tracking
+        # ref on a scoped fetch, so the ``HEAD..origin/<branch>`` count below is
         # unaffected; the shallow path compares against FETCH_HEAD, which a
         # scoped fetch also updates.
-        fetch_args = ["git", "fetch", "origin", "main"]
+        fetch_args = ["git", "fetch", "origin", branch]
         if is_shallow:
             fetch_args += ["--depth", "1"]
         fetch_args.append("--quiet")
@@ -349,13 +355,13 @@ def _check_via_local_git(repo_dir: Path) -> Optional[int]:
         pass  # Offline or timeout — use stale refs, that's fine
 
     if is_shallow:
-        # No history to count across the shallow boundary. `origin/main` may not
+        # No history to count across the shallow boundary. `origin/<branch>` may not
         # be a tracking ref in a `clone --depth 1`, so prefer FETCH_HEAD (just
-        # updated by the fetch above) and fall back to origin/main.
+        # updated by the fetch above) and fall back to origin/<branch>.
         head_rev = _git_stdout(["rev-parse", "HEAD"], cwd=repo_dir)
         target_rev = (
             _git_stdout(["rev-parse", "FETCH_HEAD"], cwd=repo_dir)
-            or _git_stdout(["rev-parse", "origin/main"], cwd=repo_dir)
+            or _git_stdout(["rev-parse", f"origin/{branch}"], cwd=repo_dir)
         )
         if not head_rev or not target_rev:
             return None
@@ -370,7 +376,7 @@ def _check_via_local_git(repo_dir: Path) -> Optional[int]:
 
     try:
         result = subprocess.run(
-            ["git", "rev-list", "--count", "HEAD..origin/main"],
+            ["git", "rev-list", "--count", f"HEAD..origin/{branch}"],
             capture_output=True, text=True, encoding="utf-8", errors="replace",
             timeout=5,
             cwd=str(repo_dir),
@@ -386,8 +392,9 @@ def check_for_updates() -> Optional[int]:
     """Check whether a Hermes update is available.
 
     Two paths: if ``HERMES_REVISION`` is set (nix builds embed it), compare
-    it to upstream main via ``git ls-remote``. Otherwise look for a local
-    git checkout and count commits behind ``origin/main``.
+    it to the configured update branch on upstream via ``git ls-remote``.
+    Otherwise look for a local git checkout and count commits behind
+    ``origin/<updates.branch>``.
 
     Returns the number of commits behind, ``UPDATE_AVAILABLE_NO_COUNT`` (-1)
     if behind but the count is unknown, ``0`` if up-to-date, or ``None`` if
@@ -396,6 +403,14 @@ def check_for_updates() -> Optional[int]:
     hermes_home = get_hermes_home()
     cache_file = hermes_home / ".update_check"
     embedded_rev = os.environ.get("HERMES_REVISION") or None
+
+    # Resolve the configured update branch so the check compares against the
+    # same branch ``hermes update`` would pull.
+    try:
+        from hermes_cli.config import get_configured_update_branch
+        branch = get_configured_update_branch()
+    except Exception:
+        branch = "main"
 
     # Docker images have no working tree to count commits against — the
     # published image excludes `.git` (see .dockerignore) and sets no
@@ -421,13 +436,14 @@ def check_for_updates() -> Optional[int]:
                 now - cached.get("ts", 0) < _UPDATE_CHECK_CACHE_SECONDS
                 and cached.get("rev") == embedded_rev
                 and cached.get("ver") == VERSION
+                and cached.get("branch") == branch
             ):
                 return cached.get("behind")
     except Exception:
         pass
 
     if embedded_rev:
-        behind = _check_via_rev(embedded_rev)
+        behind = _check_via_rev(embedded_rev, branch)
     else:
         # Prefer the running code's location over the profile-scoped path.
         # $HERMES_HOME/hermes-agent/ may be a stale copy from --clone-all;
@@ -441,11 +457,11 @@ def check_for_updates() -> Optional[int]:
             # above) or an unsupported install without a source tree.
             behind = None
         else:
-            behind = _check_via_local_git(repo_dir)
+            behind = _check_via_local_git(repo_dir, branch)
 
     try:
         cache_file.write_text(
-            json.dumps({"ts": now, "behind": behind, "rev": embedded_rev, "ver": VERSION}),
+            json.dumps({"ts": now, "behind": behind, "rev": embedded_rev, "ver": VERSION, "branch": branch}),
             encoding="utf-8",
         )
     except Exception:
@@ -532,10 +548,16 @@ def _compute_git_banner_state(repo_dir: Optional[Path] = None) -> Optional[dict]
             pass
         return None
 
-    upstream = _git_short_hash(repo_dir, "origin/main")
+    try:
+        from hermes_cli.config import get_configured_update_branch
+        branch = get_configured_update_branch()
+    except Exception:
+        branch = "main"
+
+    upstream = _git_short_hash(repo_dir, f"origin/{branch}")
     local = _git_short_hash(repo_dir, "HEAD")
     if not upstream or not local:
-        # Live-git lookup failed (e.g. shallow clone without origin/main).
+        # Live-git lookup failed (e.g. shallow clone without origin/<branch>).
         # Fall back to the baked build SHA if available.
         try:
             from hermes_cli.build_info import get_build_sha
@@ -549,7 +571,7 @@ def _compute_git_banner_state(repo_dir: Optional[Path] = None) -> Optional[dict]
     ahead = 0
     try:
         result = subprocess.run(
-            ["git", "rev-list", "--count", "origin/main..HEAD"],
+            ["git", "rev-list", "--count", f"origin/{branch}..HEAD"],
             capture_output=True,
             text=True,
             encoding="utf-8",

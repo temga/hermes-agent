@@ -60,6 +60,7 @@ import {
 } from './bootstrap-platform'
 import { decideBootstrapRepair } from './bootstrap-repair-guard'
 import { runBootstrap } from './bootstrap-runner'
+import { readDesktopUpdateConfig as readDesktopUpdateConfigFromPaths } from './update-config'
 import { detectBundleSkew } from './bundle-skew'
 import { ensureBifrostPlugins } from './bifrost-plugins-bootstrap'
 import { applyConnectionChange, resolveTerminalConnection } from './connection-apply'
@@ -762,6 +763,7 @@ const PROFILE_NAME_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/
 // tracks main. User can also override at runtime via
 // hermesDesktop.updates.setBranch().
 const DEFAULT_UPDATE_BRANCH = 'main'
+
 // desktop.log lives under HERMES_HOME/logs/ so it sits next to agent.log,
 // errors.log, gateway.log produced by hermes_logging.setup_logging — one log
 // directory per user, regardless of which UI surface produced the line.
@@ -2583,14 +2585,7 @@ function recentHermesLog() {
 // ─── Self-update (git-pull against the running backend's hermes root) ──────
 
 function readDesktopUpdateConfig() {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(DESKTOP_UPDATE_CONFIG_PATH, 'utf8'))
-    const branch = typeof parsed?.branch === 'string' ? parsed.branch.trim() : ''
-
-    return { branch: branch || DEFAULT_UPDATE_BRANCH }
-  } catch {
-    return { branch: DEFAULT_UPDATE_BRANCH }
-  }
+  return readDesktopUpdateConfigFromPaths(DESKTOP_UPDATE_CONFIG_PATH, path.join(HERMES_HOME, 'config.yaml'))
 }
 
 // Atomic file write: temp + rename (atomic on all platforms). Prevents

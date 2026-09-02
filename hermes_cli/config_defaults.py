@@ -3294,6 +3294,14 @@ DEFAULT_CONFIG = {
         #                         run (e.g. a deep feature branch that must
         #                         not accumulate update merge commits).
         "parked_branch_strategy": "switch",
+        # Which branch ``hermes update`` pulls from and the banner's update
+        # check compares against. Default is "main" (the upstream's primary
+        # branch). Forks or custom deployments that track a different branch
+        # set this so ``hermes update``, ``hermes update --check``, the
+        # dashboard's update-check, and the banner's behind-count all
+        # compare against the same branch without needing ``--branch`` on
+        # every invocation.
+        "branch": "main",
         # Refresh an already-installed cua-driver during `hermes update`.
         # The refresh is best-effort and macOS-only. Turn this off if the
         # upstream installer is not appropriate for the machine, for example
