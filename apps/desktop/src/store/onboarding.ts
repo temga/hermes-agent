@@ -836,6 +836,25 @@ export async function saveOnboardingApiKey(
   // legitimate users (corporate proxies, regional blocks, flaky/rate-limited
   // provider probes, self-hosted endpoints). We now save the value as-is and
   // let the user proceed; an actually-bad key surfaces later at chat time.
+  //
+  // Exception: BIFROST_API_KEY. The Bifrost gateway is our own infrastructure
+  // (router.rove-ai.ru), not behind corporate proxies or regional blocks, so a
+  // 401/403 from its /v1/models probe definitively means a bad key. Validating
+  // here catches mistyped keys at onboarding instead of letting the user
+  // discover the failure at first chat. Network errors (reachable=false) still
+  // don't block — same offline-tolerance contract as the local endpoint path.
+  if (envKey === 'BIFROST_API_KEY') {
+    try {
+      const probe = await validateProviderCredential(envKey, trimmed)
+
+      if (!probe.ok && probe.reachable) {
+        return { ok: false, message: probe.message || 'That API key was rejected by Bifrost.' }
+      }
+    } catch {
+      // Probe couldn't run at all — proceed to save (offline tolerance).
+    }
+  }
+
   try {
     await setEnvVar(envKey, trimmed)
     // For API-key flows we don't have a definitive provider id (the

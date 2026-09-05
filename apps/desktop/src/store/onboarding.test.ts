@@ -11,6 +11,7 @@ import {
   type OnboardingContext,
   refreshOnboarding,
   requestDesktopOnboarding,
+  saveOnboardingApiKey,
   saveOnboardingLocalEndpoint,
   submitOnboardingCode
 } from './onboarding'
@@ -642,6 +643,137 @@ describe('saveOnboardingLocalEndpoint', () => {
     expect(result.ok).toBe(false)
     expect(result.message).toContain('No provider can serve the selected model.')
     expect($desktopOnboarding.get().configured).not.toBe(true)
+  })
+})
+
+describe('saveOnboardingApiKey (Bifrost validation)', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+    $desktopOnboarding.set(baseState())
+  })
+
+  afterEach(() => {
+    window.localStorage.clear()
+    $desktopOnboarding.set(baseState())
+    vi.restoreAllMocks()
+  })
+
+  // A gateway that reports ready after reload.env — completeWithModelConfirm
+  // with ignoreRuntimeGate=true never calls setup.runtime_check, but
+  // fetchProviderDefaultModel still calls /api/model/options. Provide a
+  // minimal bifrost provider so the model-confirm step has something to show.
+  function bifrostReadyGateway(): OnboardingContext['requestGateway'] {
+    return async method => {
+      if (method === 'reload.env') {
+        return {} as never
+      }
+
+      throw new Error(`unexpected gateway method: ${method}`)
+    }
+  }
+
+  it('blocks a rejected Bifrost key before saving it to .env', async () => {
+    const calls: string[] = []
+    installApiMock(async ({ path }: { path: string }) => {
+      calls.push(path)
+
+      if (path === '/api/providers/validate') {
+        return { ok: false, reachable: true, message: 'That API key was rejected.', models: [] }
+      }
+
+      throw new Error(`unexpected api path: ${path}`)
+    })
+
+    const result = await saveOnboardingApiKey('BIFROST_API_KEY', 'sk-bf-bogus', 'Bifrost Gateway', {
+      requestGateway: bifrostReadyGateway()
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('rejected')
+    // Must NOT persist the bad key.
+    expect(calls).not.toContain('/api/env')
+  })
+
+  it('saves a valid Bifrost key and advances to model confirmation', async () => {
+    const calls: { body?: unknown; path: string }[] = []
+    const model = 'turbocloud/glm-5.2'
+
+    installApiMock(async ({ body, path }: { body?: unknown; path: string }) => {
+      calls.push({ body, path })
+
+      if (path === '/api/providers/validate') {
+        return { ok: true, reachable: true, message: '', models: [] }
+      }
+
+      if (path === '/api/env') {
+        return { ok: true }
+      }
+
+      if (path.startsWith('/api/model/options')) {
+        return { providers: [{ name: 'Bifrost Gateway', slug: 'bifrost', models: [model] }] }
+      }
+
+      if (path.startsWith('/api/model/recommended-default?')) {
+        return { provider: 'bifrost', model, free_tier: false }
+      }
+
+      if (path === '/api/model/set') {
+        return { ok: true, provider: 'bifrost', model, gateway_tools: [] }
+      }
+
+      throw new Error(`unexpected api path: ${path}`)
+    })
+
+    const result = await saveOnboardingApiKey('BIFROST_API_KEY', 'sk-bf-real', 'Bifrost Gateway', {
+      requestGateway: bifrostReadyGateway()
+    })
+
+    expect(result.ok).toBe(true)
+    // The key was validated before being persisted.
+    const validateIndex = calls.findIndex(c => c.path === '/api/providers/validate')
+    const envIndex = calls.findIndex(c => c.path === '/api/env')
+    expect(validateIndex).toBeGreaterThanOrEqual(0)
+    expect(envIndex).toBeGreaterThan(validateIndex)
+    // Advanced to model confirmation.
+    expect($desktopOnboarding.get().flow.status).toBe('confirming_model')
+  })
+
+  it('proceeds to save when the probe cannot reach the gateway (offline tolerance)', async () => {
+    const calls: string[] = []
+    const model = 'turbocloud/glm-5.2'
+
+    installApiMock(async ({ path }: { path: string }) => {
+      calls.push(path)
+
+      if (path === '/api/providers/validate') {
+        return { ok: false, reachable: false, message: 'Could not reach the provider.' }
+      }
+
+      if (path === '/api/env') {
+        return { ok: true }
+      }
+
+      if (path.startsWith('/api/model/options')) {
+        return { providers: [{ name: 'Bifrost Gateway', slug: 'bifrost', models: [model] }] }
+      }
+
+      if (path.startsWith('/api/model/recommended-default?')) {
+        return { provider: 'bifrost', model, free_tier: false }
+      }
+
+      if (path === '/api/model/set') {
+        return { ok: true, provider: 'bifrost', model, gateway_tools: [] }
+      }
+
+      throw new Error(`unexpected api path: ${path}`)
+    })
+
+    const result = await saveOnboardingApiKey('BIFROST_API_KEY', 'sk-bf-real', 'Bifrost Gateway', {
+      requestGateway: bifrostReadyGateway()
+    })
+
+    expect(result.ok).toBe(true)
+    expect(calls).toContain('/api/env')
   })
 })
 

@@ -295,6 +295,9 @@ _CREDENTIAL_PROBES: dict[str, tuple[str, str]] = {
     "OPENAI_API_KEY": ("https://api.openai.com/v1/models", "bearer"),
     "XAI_API_KEY": ("https://api.x.ai/v1/models", "bearer"),
     "GEMINI_API_KEY": ("https://generativelanguage.googleapis.com/v1beta/models", "query"),
+    # Bifrost gateway is OpenAI-compatible; /v1/models with Bearer auth is a
+    # cheap read-only call that 401s on a bad virtual key (sk-bf-*).
+    "BIFROST_API_KEY": ("https://router.rove-ai.ru/v1/models", "bearer"),
 }
 
 

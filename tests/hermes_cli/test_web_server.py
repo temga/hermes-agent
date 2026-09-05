@@ -4857,6 +4857,18 @@ class TestValidateProviderCredential:
         data = self._post("OPENROUTER_API_KEY", "sk-real").json()
         assert data["ok"] is False and data["reachable"] is False
 
+    def test_bifrost_rejected_key_blocks(self, monkeypatch):
+        """Bifrost virtual key (sk-bf-*) is probed via /v1/models; a 401 means
+        the key is bad and must block — same contract as other providers."""
+        monkeypatch.setattr("httpx.AsyncClient", _fake_httpx_async_client(status=401))
+        data = self._post("BIFROST_API_KEY", "sk-bf-bogus").json()
+        assert data["ok"] is False and data["reachable"] is True
+
+    def test_bifrost_valid_key_passes(self, monkeypatch):
+        monkeypatch.setattr("httpx.AsyncClient", _fake_httpx_async_client(status=200))
+        data = self._post("BIFROST_API_KEY", "sk-bf-real").json()
+        assert data["ok"] is True and data["reachable"] is True
+
 
 
     def test_local_endpoint_forwards_api_key_as_bearer(self, monkeypatch):
