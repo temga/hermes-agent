@@ -23,8 +23,25 @@ from tools.skills_hub_sources import BrowseShSource, LobeHubSource, UrlSource, W
 # Log-record parity with the origin module.
 logger = logging.getLogger("tools.skills_hub")
 
-HERMES_INDEX_URL = "https://hermes-agent.nousresearch.com/docs/api/skills-index.json"
+DEFAULT_HERMES_INDEX_URL = "https://hermes-agent.nousresearch.com/docs/api/skills-index.json"
 HERMES_INDEX_TTL = 6 * 3600  # 6 hours
+
+
+def _hermes_index_url() -> str:
+    """Resolve the skills index URL: config override ``skills.hub_url`` or default.
+
+    Allows users behind CDN blocks (e.g. Russia → Vercel/Fastly 403) to point
+    at a mirror of the index JSON.
+    """
+    try:
+        from hermes_cli.config import cfg_get, load_config_readonly
+
+        override = cfg_get(load_config_readonly(), "skills", "hub_url", default=None)
+        if isinstance(override, str) and override.strip():
+            return override.strip()
+    except Exception:  # pragma: no cover - config loading must never break search
+        logger.debug("skills index: config override lookup failed", exc_info=True)
+    return DEFAULT_HERMES_INDEX_URL
 
 
 def _hermes_index_cache_file() -> Path:
@@ -47,10 +64,11 @@ def _load_hermes_index() -> Optional[dict]:
     cached = _read_json_if_fresh(cache_file, HERMES_INDEX_TTL)
     if cached is not None:
         return cached
+    url = _hermes_index_url()
     data = None
     for accept_encoding in ("gzip, deflate", "identity"):
         try:
-            resp = httpx.get(HERMES_INDEX_URL, timeout=15, follow_redirects=True,
+            resp = httpx.get(url, timeout=15, follow_redirects=True,
                              headers={"Accept-Encoding": accept_encoding})
             if resp.status_code != 200:
                 logger.debug("Hermes index fetch returned %d", resp.status_code)

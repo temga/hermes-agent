@@ -4,10 +4,12 @@ import { memo, type PointerEvent as ReactPointerEvent, useEffect, useRef, useSta
 import { Button } from '@/components/ui/button'
 import type { ProfileScope } from '@/hermes'
 import { useI18n } from '@/i18n'
+import { useGatewayRequest } from '@/app/gateway/hooks/use-gateway-request'
 import { Loader2 } from '@/lib/icons'
 import { useStoreSelector } from '@/lib/use-session-slice'
 import { cn } from '@/lib/utils'
 import { $hubActions, installHubSkill, UPDATE_ALL_KEY, updateHubSkills } from '@/store/hub-actions'
+import { $hubOrigin, hubOrigin, hubPickerUrl, resolveHubUrl } from '@/store/hub-url'
 import { notify, notifyError } from '@/store/notifications'
 import { $paneHeightOverride, setPaneHeightOverride } from '@/store/panes'
 
@@ -18,8 +20,9 @@ import { $paneHeightOverride, setPaneHeightOverride } from '@/store/panes'
 // to the parent window. We validate the origin and route the install through
 // the standard hub action pipeline (background action + tailed log + Skills
 // list invalidation), scoped to the Capabilities profile selector.
-const HUB_ORIGIN = 'https://hermes-agent.nousresearch.com'
-const HUB_PICKER_URL = `${HUB_ORIGIN}/docs/skills?embed=picker`
+//
+// The hub origin is configurable via `skills.hub_url` in config.yaml — the
+// default (hermes-agent.nousresearch.com) may be blocked by CDN geofencing.
 
 // Hub viewport height: persisted through the shared pane store (same one the
 // terminal/editor panes use), dragged from the section's TOP edge — "pull the
@@ -69,6 +72,14 @@ export const EmbeddedHubPicker = memo(function EmbeddedHubPicker({
 }: EmbeddedHubPickerProps) {
   const { t } = useI18n()
   const h = t.skills.hub
+  const { requestGateway } = useGatewayRequest()
+  // Resolve the hub origin from config (skills.hub_url) once on mount —
+  // falls back to the default if the config key is unset or the read fails.
+  useEffect(() => {
+    void resolveHubUrl(requestGateway)
+  }, [requestGateway])
+  // Re-render when the resolved origin changes (after the async config fetch).
+  useStore($hubOrigin)
   // Subscribe to the ONE flag this header renders, not the whole action map —
   // $hubActions churns on every tailed log line during an install.
   const updating = useStoreSelector($hubActions, actions => actions[UPDATE_ALL_KEY]?.running ?? false)
@@ -80,6 +91,10 @@ export const EmbeddedHubPicker = memo(function EmbeddedHubPicker({
   const height = heightOverride ?? HUB_DEFAULT_PX
   const open = height > HUB_COLLAPSED_PX
   const [dragging, setDragging] = useState(false)
+  // Hub iframe load-failure detection: cross-origin iframes can't be inspected
+  // for status codes, so we use a timeout — if the frame hasn't fired onLoad
+  // within 8s, we show the blocked-fallback message (CDN geofencing, etc.).
+  const [hubFailed, setHubFailed] = useState(false)
   const sectionRef = useRef<HTMLElement>(null)
 
   // Top-edge sash: dragging UP grows the hub (shrinking the skills list above,
@@ -119,6 +134,21 @@ export const EmbeddedHubPicker = memo(function EmbeddedHubPicker({
     window.addEventListener('pointerup', onUp, { once: true })
   }
 
+  // Hub iframe load-failure timeout: if onLoad doesn't fire within 8s of the
+  // iframe mounting (or origin changing), show the blocked-fallback message.
+  // Cross-origin iframes fire onLoad even for error pages (403), but a total
+  // network failure (DNS, connection refused) leaves the frame blank with no
+  // event — the timeout catches that case.
+  const resolvedOrigin = $hubOrigin.get()
+  useEffect(() => {
+    if (!open || hubFailed) {
+      return undefined
+    }
+    setHubFailed(false)
+    const timer = setTimeout(() => setHubFailed(true), 8000)
+    return () => clearTimeout(timer)
+  }, [open, hubFailed, resolvedOrigin])
+
   // Picker messages from the embedded hub page. Origin-checked; installs route
   // through the same store pipeline the hub rows use, so the action log,
   // optimistic flips, and Skills-list refresh all come for free.
@@ -128,7 +158,7 @@ export const EmbeddedHubPicker = memo(function EmbeddedHubPicker({
     }
 
     const onMessage = (event: MessageEvent) => {
-      if (event.origin !== HUB_ORIGIN) {
+      if (event.origin !== hubOrigin()) {
         return
       }
 
@@ -224,24 +254,33 @@ export const EmbeddedHubPicker = memo(function EmbeddedHubPicker({
               width: '100%'
             }}
           >
-            <iframe
-              sandbox="allow-scripts allow-same-origin"
-              src={HUB_PICKER_URL}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                height: '133.34%',
-                // While the sash drags, the cross-origin iframe must not eat
-                // the pointermove stream.
-                pointerEvents: dragging ? 'none' : 'auto',
-                transform: 'scale(0.75)',
-                transformOrigin: 'top left',
-                width: '133.34%'
-              }}
-              title={h.pickerTitle}
-            />
+            {hubFailed ? (
+              <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center">
+                <p className="text-[0.7rem] leading-4 text-(--ui-text-tertiary)">{h.pickerBlocked}</p>
+              </div>
+            ) : (
+              <iframe
+                onLoad={() => setHubFailed(false)}
+                sandbox="allow-scripts allow-same-origin"
+                src={hubPickerUrl()}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  height: '133.34%',
+                  // While the sash drags, the cross-origin iframe must not eat
+                  // the pointermove stream.
+                  pointerEvents: dragging ? 'none' : 'auto',
+                  transform: 'scale(0.75)',
+                  transformOrigin: 'top left',
+                  width: '133.34%'
+                }}
+                title={h.pickerTitle}
+              />
+            )}
           </div>
-          <p className="shrink-0 px-1 text-[0.65rem] leading-4 text-(--ui-text-quaternary)">{h.pickerHint}</p>
+          <p className="shrink-0 px-1 text-[0.65rem] leading-4 text-(--ui-text-quaternary)">
+            {hubFailed ? h.pickerBlocked : h.pickerHint}
+          </p>
         </div>
       )}
     </section>

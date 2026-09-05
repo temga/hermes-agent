@@ -1335,6 +1335,11 @@ DEFAULT_CONFIG = {
         # curator ledger` / `rollback <entry-id>`. Never a gate — failures can't block.
         # See #79686.
         "ledger": True,
+        # Override the Skills Hub index/docs URL. Used when the default
+        # (hermes-agent.nousresearch.com) is blocked by CDN geofencing (e.g.
+        # Russia → Vercel/Fastly 403). Points at a mirror serving the same
+        # /docs/api/skills-index.json payload and /docs/skills?embed=picker page.
+        "hub_url": "",
     },
     # Curator — background maintenance of AGENT-CREATED skills (never hub-installed): marks
     # long-unused skills stale, archives (never deletes) obsolete ones, optionally consolidates

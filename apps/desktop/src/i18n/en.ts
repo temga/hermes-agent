@@ -1510,6 +1510,7 @@ export const en: Translations = {
       pickerBrowse: 'Browse the full hub',
       pickerHide: 'Hide the hub browser',
       pickerHint: 'Hit "+ Add to this Agent" on any skill — it installs and appears in the list above.',
+      pickerBlocked: 'The Skills Hub could not be reached. This may be due to network restrictions or CDN geofencing. Use search below, or set "skills.hub_url" in config.yaml to a mirror.',
       loadFailed: 'Skill hub failed to load',
       previewFailed: 'Skill preview failed',
       scanFailed: 'Security scan failed',

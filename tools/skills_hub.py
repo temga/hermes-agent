@@ -348,7 +348,7 @@ _PLUGIN_COMPAT_LAZY = {
     'GitHubAuth': ('tools.skills_hub_github', 'GitHubAuth'),
     'GitHubSource': ('tools.skills_hub_github', 'GitHubSource'),
     'HERMES_INDEX_TTL': ('tools.skills_hub_search', 'HERMES_INDEX_TTL'),
-    'HERMES_INDEX_URL': ('tools.skills_hub_search', 'HERMES_INDEX_URL'),
+    'DEFAULT_HERMES_INDEX_URL': ('tools.skills_hub_search', 'DEFAULT_HERMES_INDEX_URL'),
     'HermesIndexSource': ('tools.skills_hub_official', 'HermesIndexSource'),
     'LobeHubSource': ('tools.skills_hub_sources', 'LobeHubSource'),
     'OptionalSkillSource': ('tools.skills_hub_official', 'OptionalSkillSource'),

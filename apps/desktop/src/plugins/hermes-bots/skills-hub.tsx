@@ -12,14 +12,10 @@ import { useEffect, useRef, useState } from 'react'
 import { useBots } from './i18n'
 
 // ── skills hub section: the REAL hub page (docs) embedded as a picker ──────
-// https://hermes-agent.nousresearch.com/docs/skills?embed=picker hides the
-// docs chrome and adds "+ Add to this Agent" per card, posting
-// {type: 'hermes-skill-pick', ...} to us (hermes-agent#86243). We validate
-// the origin, install via skills.manage, and bubble onInstalled so the
-// checklist above gains the row. Search-box fallback kept for offline use.
-
-const HUB_ORIGIN = 'https://hermes-agent.nousresearch.com'
-const HUB_PICKER_URL = HUB_ORIGIN + '/docs/skills?embed=picker'
+// The hub origin is configurable via `skills.hub_url` in config.yaml — the
+// default (hermes-agent.nousresearch.com) may be blocked by CDN geofencing
+// (e.g. Russia → Vercel/Fastly 403). We read the override once on mount.
+const DEFAULT_HUB_ORIGIN = 'https://hermes-agent.nousresearch.com'
 /** One `skills.manage action=search` hit. */
 interface HubSkillResult {
   description?: string
@@ -40,8 +36,28 @@ export function HubSkillsSection({ forProfile, onInstalled }: HubSkillsSectionPr
   const [installing, setInstalling] = useState<null | string>(null)
   const [installed, setInstalled] = useState<Record<string, boolean>>({})
   const [browseHub, setBrowseHub] = useState(false)
+  // Hub origin resolved from `skills.hub_url` config; falls back to default.
+  const [hubOrigin, setHubOrigin] = useState(DEFAULT_HUB_ORIGIN)
   const installRef = useRef<((name: string, displayName?: string) => Promise<void>) | null>(null)
   const frameRef = useRef<HTMLIFrameElement | null>(null)
+
+  // Resolve the hub origin from config once on mount. The default
+  // (hermes-agent.nousresearch.com) may be blocked by CDN geofencing.
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const result = await host.request<{ value?: string }>('config.get', { key: 'skills.hub_url' })
+        const override = result?.value?.trim()
+        if (!cancelled && override) {
+          setHubOrigin(override.replace(/\/+$/, ''))
+        }
+      } catch {
+        // Keep the default
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   // Picker messages from the embedded hub page. Origin- AND source-checked —
   // only OUR frame may ask for an install (the hub origin alone would let any
@@ -53,7 +69,7 @@ export function HubSkillsSection({ forProfile, onInstalled }: HubSkillsSectionPr
     }
 
     const onMessage = (event: MessageEvent) => {
-      if (event.origin !== HUB_ORIGIN) {
+      if (event.origin !== hubOrigin) {
         return
       }
 
@@ -184,7 +200,7 @@ export function HubSkillsSection({ forProfile, onInstalled }: HubSkillsSectionPr
             <iframe
               ref={frameRef}
               sandbox="allow-scripts allow-same-origin"
-              src={HUB_PICKER_URL}
+              src={hubOrigin + '/docs/skills?embed=picker'}
               style={{
                 width: '133.34%',
                 height: '133.34%',

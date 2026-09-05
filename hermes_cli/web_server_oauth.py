@@ -164,6 +164,10 @@ _OAUTH_PROVIDER_CATALOG: tuple[Dict[str, Any], ...] = (
     {"id": "claude-code", "name": "Anthropic OAuth: Required Extra Usage Credits to Use Subscription",
      "flow": "external", "cli_command": "claude setup-token",
      "docs_url": "https://docs.claude.com/en/docs/claude-code", "status_fn": _claude_code_only_status},
+    # Bifrost Gateway: API-key provider (not OAuth). Surfaced here as an Accounts-tab card so
+    # users can connect it the same way as other providers; the key is entered on the Keys tab.
+    {"id": "bifrost", "name": "Bifrost Gateway", "flow": "external", "cli_command": "hermes config set providers.bifrost.key_env BIFROST_API_KEY",
+     "docs_url": "https://router.rove-ai.ru", "status_fn": None},
 )
 _oauth_sessions: Dict[str, Dict[str, Any]] = {}
 _oauth_sessions_lock = threading.Lock()

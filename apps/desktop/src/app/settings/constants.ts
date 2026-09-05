@@ -225,6 +225,13 @@ export const PROVIDER_GROUPS: ProviderPrefix[] = [
     description: 'Authenticate via AWS profile + region',
     docsUrl: 'https://docs.aws.amazon.com/bedrock/latest/userguide/bedrock-regions.html',
     priority: 23
+  },
+  {
+    prefix: 'BIFROST_',
+    name: 'Bifrost Gateway',
+    description: 'Bifrost AI Gateway — единый шлюз: LLM, image gen, search. Один ключ sk-bf-* для всех провайдеров',
+    docsUrl: 'https://router.rove-ai.ru',
+    priority: 24
   }
 ]
 
