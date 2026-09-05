@@ -2204,7 +2204,9 @@ export const ar = defineLocale({
     price: (input, output) => `${input} إدخال / ${output} إخراج لكل مليون رمز`,
     change: 'تغيير',
     startChatting: 'ابدأ',
-    docs: provider => `وثائق ${provider}`
+    docs: provider => `وثائق ${provider}`,
+    chooseLanguageTitle: 'اختر لغتك',
+    chooseLanguageDesc: 'يمكنك تغييره لاحقًا في الإعدادات.'
   },
   modelPicker: {
     title: 'اختيار النموذج',

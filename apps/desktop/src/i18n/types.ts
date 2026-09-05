@@ -2503,6 +2503,8 @@ export interface Translations {
     change: string
     startChatting: string
     docs: (provider: string) => string
+    chooseLanguageTitle: string
+    chooseLanguageDesc: string
   }
 
   modelPicker: {

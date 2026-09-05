@@ -3105,7 +3105,9 @@ export const zh: Translations = {
     price: (input, output) => `${input} 输入 / ${output} 输出每 Mtok`,
     change: '更改',
     startChatting: '开始',
-    docs: provider => `${provider} 文档`
+    docs: provider => `${provider} 文档`,
+    chooseLanguageTitle: '选择语言',
+    chooseLanguageDesc: '稍后可在设置中更改。'
   },
 
   modelPicker: {

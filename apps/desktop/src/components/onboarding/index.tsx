@@ -30,6 +30,7 @@ import {
 import type { ModelOptionProvider, OAuthProvider } from '@/types/hermes'
 
 import { DocsLink, FlowPanel, Status } from './flow'
+import { LanguageStep } from './language-step'
 import {
   BifrostProviderRow,
   FeaturedProviderRow,
@@ -221,6 +222,11 @@ export function DesktopOnboardingOverlay({
   // connecting overlay's exit choreography instead of cutting instantly.
   const [leaving, setLeaving] = useState(false)
 
+  // First-run language step: shown before the provider picker on the initial
+  // onboarding (not in manual mode — the user already has a language). Once
+  // the user confirms, this flips to true and the picker shows.
+  const [languageDone, setLanguageDone] = useState(onboarding.manual)
+
   const finalizeOnboarding = () => {
     if (leaving) {
       return
@@ -363,7 +369,9 @@ export function DesktopOnboardingOverlay({
         <div className="grid gap-3 p-5">
           {reason ? <ReasonNotice reason={reason} /> : null}
           {ready ? (
-            showPicker ? (
+            !languageDone && showPicker ? (
+              <LanguageStep onContinue={() => setLanguageDone(true)} />
+            ) : showPicker ? (
               <Picker ctx={ctx} />
             ) : (
               <FlowPanel ctx={ctx} flow={flow} leaving={leaving} onBegin={finalizeOnboarding} />
@@ -462,6 +470,15 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
   const ordered = useMemo(() => (providers ? sortProviders(providers) : []), [providers])
   const hasOauth = ordered.length > 0
   const apiKeyOptions = useApiKeyCatalog()
+  // When the user clicked a specific provider row (Bifrost, Fireworks,
+  // OpenRouter), focus the key form on that single provider instead of
+  // rendering the full api_key catalog grid. The full grid is for the generic
+  // fallback when no OAuth providers loaded (apiKeyInitialEnv undefined).
+  const focusedEnvKey = localEndpoint ? 'OPENAI_BASE_URL' : apiKeyInitialEnv
+  const focusedOptions = focusedEnvKey
+    ? apiKeyOptions.filter(o => o.envKey === focusedEnvKey)
+    : apiKeyOptions
+  const formOptions = focusedOptions.length > 0 ? focusedOptions : apiKeyOptions
 
   // localEndpoint forces the key form regardless of `mode` (which a manual
   // provider refresh may flip back to 'oauth'); it preselects the local option
@@ -480,7 +497,7 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
           initialEnvKey={localEndpoint ? 'OPENAI_BASE_URL' : apiKeyInitialEnv}
           onBack={() => setOnboardingMode('oauth')}
           onSave={(envKey, value, name, apiKey) => saveOnboardingApiKey(envKey, value, name, ctx, apiKey)}
-          options={apiKeyOptions}
+          options={formOptions}
         />
         {manual ? null : (
           <div className="flex justify-center pt-1">
@@ -687,27 +704,34 @@ export function ApiKeyForm({
         </Button>
       ) : null}
 
-      <div className="grid max-h-[42dvh] gap-2 overflow-y-auto p-1 sm:grid-cols-2">
-        {options.map(o => (
-          <button
-            className={cn(
-              'rounded-2xl border bg-background/60 p-3 text-left transition hover:bg-accent/50',
-              option.envKey === o.envKey ? 'border-primary ring-2 ring-primary/20' : 'border-transparent'
-            )}
-            key={o.envKey}
-            onClick={() => pick(o)}
-            type="button"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-medium">{o.name}</span>
-              {isSet?.(o.envKey) ? <Check className="size-3.5 text-muted-foreground" /> : null}
-            </div>
-            {(t.onboarding.apiKeyOptions[o.id]?.short ?? o.short) ? (
-              <p className="mt-1 text-xs text-muted-foreground">{t.onboarding.apiKeyOptions[o.id]?.short ?? o.short}</p>
-            ) : null}
-          </button>
-        ))}
-      </div>
+      {options.length > 1 ? (
+        <div className="grid max-h-[42dvh] gap-2 overflow-y-auto p-1 sm:grid-cols-2">
+          {options.map(o => (
+            <button
+              className={cn(
+                'rounded-2xl border bg-background/60 p-3 text-left transition hover:bg-accent/50',
+                option.envKey === o.envKey ? 'border-primary ring-2 ring-primary/20' : 'border-transparent'
+              )}
+              key={o.envKey}
+              onClick={() => pick(o)}
+              type="button"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-medium">{o.name}</span>
+                {isSet?.(o.envKey) ? <Check className="size-3.5 text-muted-foreground" /> : null}
+              </div>
+              {(t.onboarding.apiKeyOptions[o.id]?.short ?? o.short) ? (
+                <p className="mt-1 text-xs text-muted-foreground">{t.onboarding.apiKeyOptions[o.id]?.short ?? o.short}</p>
+              ) : null}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 px-1">
+          <KeyRound className="size-4 text-muted-foreground" />
+          <span className="text-sm font-medium">{options[0]?.name}</span>
+        </div>
+      )}
 
       <div className="grid scroll-mt-4 gap-2" ref={entryRef}>
         <div className="flex items-center justify-between gap-3">

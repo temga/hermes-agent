@@ -121,7 +121,15 @@ export function I18nProvider({ children, configClient = defaultConfigClient, ini
       .getConfig()
       .then(config => {
         if (!cancelled) {
-          setLocaleState(normalizeLocale(getConfigDisplayLanguage(config)))
+          // Only override the initial locale when the config actually
+          // declares a display language. A new user with no saved language
+          // keeps the initialLocale (e.g. 'ru' for the Bifrost edition)
+          // instead of being reset to DEFAULT_LOCALE.
+          const configLang = getConfigDisplayLanguage(config)
+
+          if (configLang !== undefined) {
+            setLocaleState(normalizeLocale(configLang))
+          }
         }
       })
       .catch(error => {

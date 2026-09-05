@@ -2957,7 +2957,9 @@ export const en: Translations = {
     price: (input, output) => `${input} in / ${output} out per Mtok`,
     change: 'Change',
     startChatting: 'Begin',
-    docs: provider => `${provider} docs`
+    docs: provider => `${provider} docs`,
+    chooseLanguageTitle: 'Choose your language',
+    chooseLanguageDesc: 'You can change this later in Settings.'
   },
 
   modelPicker: {

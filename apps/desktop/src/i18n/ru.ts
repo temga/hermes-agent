@@ -2988,7 +2988,9 @@ export const ru = defineLocale({
     price: (input, output) => `${input} вход / ${output} выход за Mtok`,
     change: 'Изменить',
     startChatting: 'Начать',
-    docs: provider => `Документация ${provider}`
+    docs: provider => `Документация ${provider}`,
+    chooseLanguageTitle: 'Выберите язык',
+    chooseLanguageDesc: 'Позже можно сменить в Настройках.'
   },
   modelPicker: {
     title: 'Сменить модель',
