@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { runInTerminal } from '@/app/right-sidebar/store'
 import {
+  BifrostProviderRow,
   FEATURED_ID,
   FeaturedProviderRow,
   FireworksProviderRow,
@@ -161,8 +162,12 @@ function OAuthPicker({
     startManualProviderOAuth(p.id)
   }
 
-  const featured = ordered.find(p => p.id === FEATURED_ID && !p.status?.logged_in) ?? null
-  const rest = featured ? ordered.filter(p => p.id !== FEATURED_ID) : ordered
+  // Bifrost gets its own featured row (matching the onboarding picker) — pull it
+  // out of the provider list so it doesn't render a second time as a plain row.
+  const bifrost = ordered.find(p => p.id === 'bifrost') ?? null
+  const remaining = ordered.filter(p => p.id !== 'bifrost')
+  const featured = remaining.find(p => p.id === FEATURED_ID && !p.status?.logged_in) ?? null
+  const rest = featured ? remaining.filter(p => p.id !== FEATURED_ID) : remaining
   // Keep connected accounts grouped and always visible; only the unconnected
   // providers hide behind the disclosure, so the page leads with what's set up.
   // Both lists preserve `sortProviders` order (curated priority, then name).
@@ -188,6 +193,7 @@ function OAuthPicker({
       <p className="-mt-2 mb-1 text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) text-(--ui-text-tertiary)">
         {p.intro}
       </p>
+      {bifrost && <BifrostProviderRow onClick={() => onWantApiKey()} />}
       {featured && <FeaturedProviderRow onSelect={select} provider={featured} />}
       {/* Slot #2 — the no-account path, matching onboarding. Behind the
           --local launch flag like every local-models surface. */}
