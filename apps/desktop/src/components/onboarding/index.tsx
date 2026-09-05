@@ -496,8 +496,11 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
   }
 
   const select = (p: OAuthProvider) => void startProviderOAuth(p, ctx)
-  const featured = ordered.find(p => p.id === FEATURED_ID) ?? null
-  const rest = featured ? ordered.filter(p => p.id !== FEATURED_ID) : ordered
+  // Bifrost is rendered as a dedicated BifrostProviderRow above the list — exclude
+  // it from the provider list so it doesn't appear twice (once curated, once catalog).
+  const filtered = ordered.filter(p => p.id !== 'bifrost')
+  const featured = filtered.find(p => p.id === FEATURED_ID) ?? null
+  const rest = featured ? filtered.filter(p => p.id !== FEATURED_ID) : filtered
   // Collapse the secondary providers behind a disclosure whenever Nous Portal
   // is present to anchor the choice — otherwise show the full list. The
   // Fireworks/OpenRouter key rows always live behind the disclosure, so the

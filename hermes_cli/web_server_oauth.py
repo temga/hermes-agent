@@ -164,6 +164,11 @@ _OAUTH_PROVIDER_CATALOG: tuple[Dict[str, Any], ...] = (
     {"id": "claude-code", "name": "Anthropic OAuth: Required Extra Usage Credits to Use Subscription",
      "flow": "external", "cli_command": "claude setup-token",
      "docs_url": "https://docs.claude.com/en/docs/claude-code", "status_fn": _claude_code_only_status},
+    # Bifrost Gateway: API-key provider (sk-bf-*). Surfaced on the Accounts tab as a
+    # connected-provider card; clicking it jumps to the Keys tab (key-entry form),
+    # and disconnect clears BIFROST_API_KEY from .env via the env-var lifecycle.
+    {"id": "bifrost", "name": "Bifrost Gateway", "flow": "external", "cli_command": "",
+     "docs_url": "https://router.rove-ai.ru", "status_fn": None},
 )
 _oauth_sessions: Dict[str, Dict[str, Any]] = {}
 _oauth_sessions_lock = threading.Lock()

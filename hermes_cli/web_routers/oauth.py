@@ -453,11 +453,11 @@ def _oauth_provider_disconnect_command(provider: Dict[str, Any]) -> Optional[str
 
 def _oauth_provider_disconnect_hint(provider: Dict[str, Any], status: Dict[str, Any]) -> Optional[str]:
     """Return the manual disconnect path when the API cannot clear this provider."""
-    # "anthropic" is flow == "external" (no in-dashboard login) but Hermes still
-    # OWNS its credential (the PKCE file ~/.hermes/.anthropic_oauth.json and its
-    # credential-pool entry, written by `hermes auth add anthropic`), so it is
+    # Providers whose credentials Hermes OWNS despite flow == "external" (no in-dashboard
+    # login): Anthropic (PKCE file + credential-pool), Bifrost (API key in .env). They are
     # excluded from the "external providers can't be auto-disconnected" rule.
-    if provider.get("flow") == "external" and provider.get("id") != "anthropic":
+    _hermes_owned_external = {"anthropic", "bifrost"}
+    if provider.get("flow") == "external" and provider.get("id") not in _hermes_owned_external:
         if _oauth_provider_disconnect_command(provider):
             # Fallback wording for surfaces without the one-click "run in terminal" path.
             return "Managed outside Hermes — run the disconnect command to remove it."
@@ -538,6 +538,16 @@ def _clear_anthropic_auth() -> bool:
     return cleared
 
 
+def _clear_env_var(env_var: str) -> bool:
+    """Remove an env var from the profile .env file + credential mirrors (API-key disconnect)."""
+    try:
+        from hermes_cli.credential_lifecycle import remove_provider_env_credential
+        result = remove_provider_env_credential(env_var)
+        return bool(result.get("found"))
+    except Exception:
+        return False
+
+
 @router.delete("/api/providers/oauth/{provider_id}")
 async def disconnect_oauth_provider(provider_id: str, request: Request, profile: Optional[str] = None):
     """Disconnect an OAuth provider. Token-protected (matches /env/reveal)."""
@@ -555,6 +565,10 @@ async def disconnect_oauth_provider(provider_id: str, request: Request, profile:
         if provider_id == "anthropic":
             cleared = _clear_anthropic_auth()
             _log.info("oauth/disconnect: %s", provider_id)
+            return {"ok": bool(cleared), "provider": provider_id}
+        if provider_id == "bifrost":
+            cleared = _clear_env_var("BIFROST_API_KEY")
+            _log.info("oauth/disconnect: %s (cleared=%s)", provider_id, cleared)
             return {"ok": bool(cleared), "provider": provider_id}
         try:
             from hermes_cli.auth import clear_provider_auth, invalidate_nous_auth_status_cache

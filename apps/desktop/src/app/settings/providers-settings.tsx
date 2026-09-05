@@ -151,7 +151,15 @@ function OAuthPicker({
     return null
   }
 
-  const select = (p: OAuthProvider) => startManualProviderOAuth(p.id)
+  const select = (p: OAuthProvider) => {
+    // Bifrost is an API-key provider surfaced on the Accounts tab — clicking it
+    // jumps to the Keys tab (key-entry form) instead of launching a terminal flow.
+    if (p.id === 'bifrost') {
+      onWantApiKey()
+      return
+    }
+    startManualProviderOAuth(p.id)
+  }
 
   const featured = ordered.find(p => p.id === FEATURED_ID && !p.status?.logged_in) ?? null
   const rest = featured ? ordered.filter(p => p.id !== FEATURED_ID) : ordered
