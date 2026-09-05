@@ -79,7 +79,28 @@ async def get_config(profile: Optional[str] = None):
     # load_config() reads from disk; a slow lock-holder on the event loop froze
     # the whole gateway for >1s. asyncio.to_thread copies the contextvar
     # context, so the profile override stays scoped to the worker thread.
-    config = await scoped_to_thread(profile, lambda: _normalize_config_for_web(load_config()))
+    def _load():
+        config = _normalize_config_for_web(load_config())
+        # display.language: strip the DEFAULT_CONFIG-merged value when the user
+        # never set it in their config.yaml. Without this, load_config() always
+        # returns language="en" (from DEFAULT_CONFIG deep-merge) for a new user,
+        # and the desktop I18nProvider — which treats any non-undefined
+        # display.language as authoritative — overrides the edition's
+        # initialLocale (e.g. "ru" for Bifrost) on every first run, showing the
+        # onboarding in English. By omitting the key when it's not in the raw
+        # file, getConfigDisplayLanguage() returns undefined and the provider
+        # keeps its initialLocale (commit 53137a2c92's intended behavior).
+        raw = read_raw_config()
+        raw_display = raw.get("display") if isinstance(raw.get("display"), dict) else {}
+        if "language" not in raw_display:
+            display = config.get("display")
+            if isinstance(display, dict) and "language" in display:
+                display = dict(display)
+                del display["language"]
+                config["display"] = display
+        return config
+
+    config = await scoped_to_thread(profile, _load)
     # Strip internal keys that the frontend shouldn't see or send back
     return {k: v for k, v in config.items() if not k.startswith("_")}
 

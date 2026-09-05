@@ -2476,6 +2476,13 @@ tts['provider'] = 'bifrost'
 tts_bf = tts.setdefault('bifrost', {})
 tts_bf['model'] = 'espeech-tts'
 
+# skills: hub_url — point Skills Hub at the RU mirror. The default
+# (hermes-agent.nousresearch.com) is 403-blocked by CDN geofencing in RF;
+# without this override the desktop Skills Hub picker and the backend
+# skills index both fail. Plain URL — consumers read it verbatim.
+skills = cfg.setdefault('skills', {})
+skills['hub_url'] = 'https://hub.rove-ai.ru'
+
 save_config(cfg, merge_existing=True)
 print("Configured all service providers → bifrost")
 PYEOF
