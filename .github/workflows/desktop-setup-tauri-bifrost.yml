@@ -276,14 +276,14 @@ jobs:
       - name: Upload EXE to release
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          $ErrorActionPreference = 'Stop'
           $tag = $env:GITHUB_REF -replace '^refs/tags/', ''
           $exe = '${{ steps.find_exe.outputs.exe_path }}'
 
           # Try to create the release; if it already exists (race with Mac job), upload instead.
-          try {
-            gh release create $tag --repo $env:GITHUB_REPOSITORY --title "Hermes Bifrost Edition — $tag" --notes "Hermes Setup — Bifrost Edition (Tauri installer)" $exe
-          } catch {
+          # PowerShell try/catch doesn't catch non-zero exit codes from external commands,
+          # so we check $LASTEXITCODE explicitly.
+          gh release create $tag --repo $env:GITHUB_REPOSITORY --title "Hermes Bifrost Edition — $tag" --notes "Hermes Setup — Bifrost Edition (Tauri installer)" $exe 2>$null
+          if ($LASTEXITCODE -ne 0) {
             gh release upload $tag --repo $env:GITHUB_REPOSITORY --clobber $exe
           }
         env:
