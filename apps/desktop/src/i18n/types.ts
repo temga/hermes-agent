@@ -1325,6 +1325,7 @@ export interface Translations {
       pickerBrowse: string
       pickerHide: string
       pickerHint: string
+      pickerBlocked: string
       loadFailed: string
       previewFailed: string
       scanFailed: string

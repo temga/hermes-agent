@@ -140,13 +140,26 @@ export const EmbeddedHubPicker = memo(function EmbeddedHubPicker({
   // network failure (DNS, connection refused) leaves the frame blank with no
   // event — the timeout catches that case.
   const resolvedOrigin = $hubOrigin.get()
+  // Timer ref shared with the iframe's onLoad handler. A successful load
+  // cancels the failure timeout — without this, onLoad's setHubFailed(false)
+  // was a no-op (already false) and the 8s timer fired regardless, flipping a
+  // perfectly good hub to the "unavailable, change mirror" overlay.
+  const loadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     if (!open || hubFailed) {
       return undefined
     }
     setHubFailed(false)
-    const timer = setTimeout(() => setHubFailed(true), 8000)
-    return () => clearTimeout(timer)
+    if (loadTimerRef.current) {
+      clearTimeout(loadTimerRef.current)
+    }
+    loadTimerRef.current = setTimeout(() => setHubFailed(true), 8000)
+    return () => {
+      if (loadTimerRef.current) {
+        clearTimeout(loadTimerRef.current)
+        loadTimerRef.current = null
+      }
+    }
   }, [open, hubFailed, resolvedOrigin])
 
   // Picker messages from the embedded hub page. Origin-checked; installs route
@@ -260,7 +273,15 @@ export const EmbeddedHubPicker = memo(function EmbeddedHubPicker({
               </div>
             ) : (
               <iframe
-                onLoad={() => setHubFailed(false)}
+                onLoad={() => {
+                  // Successful load — cancel the failure timeout so it can't
+                  // flip the hub to the "unavailable" overlay 8s later.
+                  if (loadTimerRef.current) {
+                    clearTimeout(loadTimerRef.current)
+                    loadTimerRef.current = null
+                  }
+                  setHubFailed(false)
+                }}
                 sandbox="allow-scripts allow-same-origin"
                 src={hubPickerUrl()}
                 style={{
