@@ -5,6 +5,8 @@ import './store/active-work'
 import './store/power'
 // Side-effect: applies the persisted window translucency on load.
 import './store/translucency'
+// Side-effect: applies the persisted user-bubble transparency on load.
+import './store/user-bubble-transparency'
 // Dev-only render/state churn counters. MUST precede the `react-dom` import
 // below: react-dom captures the devtools hook at module init, so bippy has to
 // install during THIS import's evaluation or every commit goes unseen
@@ -65,7 +67,7 @@ if (winParam === 'overlay') {
     <StrictMode>
       <RootErrorBoundary>
         <QueryClientProvider client={queryClient}>
-          <I18nProvider>
+          <I18nProvider initialLocale="ru">
             <ThemeProvider>
               <HapticsProvider>
                 {/* ONE tooltip provider for the whole app. Every `Tip` used to

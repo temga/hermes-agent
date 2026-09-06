@@ -1,0 +1,10 @@
+name: bifrost-stt
+version: 1.0.0
+description: "Bifrost STT backend. Routes audio transcription through Bifrost gateway /v1/audio/transcriptions. Same sk-bf-* key as LLM. Supports whisper-1, whisper-podlodka-turbo (Russian-tuned), and gigaam-v3 (Sber GigaAM)."
+author: temga
+kind: transcription
+requires_env:
+  - name: BIFROST_API_KEY
+    description: "Bifrost virtual key (sk-bf-*). Same key as LLM provider."
+    url: "https://router.rove-ai.ru"
+    secret: true

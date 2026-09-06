@@ -1,0 +1,12 @@
+name: bifrost-web
+version: 1.0.0
+description: "Bifrost web search + extract backend. Routes through Bifrost gateway MCP endpoint (/mcp). Same sk-bf-* key as LLM. Provides web_search, tg_search, and crawl via NeuralDeep search proxied through gateway."
+author: temga
+kind: backend
+provides_web_providers:
+  - bifrost
+requires_env:
+  - name: BIFROST_API_KEY
+    description: "Bifrost virtual key (sk-bf-*). Same key as LLM provider."
+    url: "https://router.rove-ai.ru"
+    secret: true

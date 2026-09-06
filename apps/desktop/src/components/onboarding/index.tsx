@@ -11,6 +11,7 @@ import { Check, ChevronDown, ChevronLeft, KeyRound, Loader2 } from '@/lib/icons'
 import { isProviderSetupErrorMessage } from '@/lib/provider-setup-errors'
 import { cn } from '@/lib/utils'
 import { $desktopBoot, type DesktopBootState } from '@/store/boot'
+import { $localModelsEnabled } from '@/store/local-models-flag'
 import {
   $desktopOnboarding,
   clearPendingProviderOAuth,
@@ -29,24 +30,25 @@ import {
 import type { ModelOptionProvider, OAuthProvider } from '@/types/hermes'
 
 import { DocsLink, FlowPanel, Status } from './flow'
+import { LanguageStep } from './language-step'
 import {
+  BifrostProviderRow,
   FeaturedProviderRow,
   FireworksProviderRow,
-  NeuralDeepProviderRow,
+  LocalModelsProviderRow,
   OpenRouterProviderRow,
   ProviderRow,
-  RouterAiProviderRow,
   sortProviders
 } from './providers'
 
 export {
+  BifrostProviderRow,
   FeaturedProviderRow,
   FireworksProviderRow,
   KeyProviderRow,
-  NeuralDeepProviderRow,
+  LocalModelsProviderRow,
   OpenRouterProviderRow,
   ProviderRow,
-  RouterAiProviderRow,
   providerTitle,
   sortProviders
 } from './providers'
@@ -70,7 +72,16 @@ export interface ApiKeyOption {
 
 // Curated order mirrors CANONICAL_PROVIDERS: Fireworks sits #2 overall (after
 // Nous Portal OAuth), ahead of OpenRouter and the rest of the key catalog.
+// Bifrost leads for the Bifrost edition build — one key (sk-bf-*) powers all
+// services (LLM + image gen + web + STT + TTS).
 const API_KEY_OPTIONS: ApiKeyOption[] = [
+  {
+    id: 'bifrost',
+    name: 'Bifrost Gateway',
+    envKey: 'BIFROST_API_KEY',
+    docsUrl: 'https://router.rove-ai.ru',
+    placeholder: 'sk-bf-...'
+  },
   {
     id: 'fireworks',
     name: 'Fireworks AI',
@@ -211,6 +222,11 @@ export function DesktopOnboardingOverlay({
   // connecting overlay's exit choreography instead of cutting instantly.
   const [leaving, setLeaving] = useState(false)
 
+  // First-run language step: shown before the provider picker on the initial
+  // onboarding (not in manual mode — the user already has a language). Once
+  // the user confirms, this flips to true and the picker shows.
+  const [languageDone, setLanguageDone] = useState(onboarding.manual)
+
   const finalizeOnboarding = () => {
     if (leaving) {
       return
@@ -286,9 +302,17 @@ export function DesktopOnboardingOverlay({
   // (those are surfaced by FlowPanel, not as a banner).
   const rawReason = onboarding.reason?.trim() || null
 
+  // Bifrost edition: suppress the credential-warning banner entirely. The
+  // provider picker (Bifrost row first) is self-explanatory — a "no API key
+  // configured" notice above it is noise, not signal.
+  const isBifrostKeyWarning =
+    rawReason !== null &&
+    /bifrost|BIFROST_API_KEY/i.test(rawReason)
+
   const reason =
     rawReason &&
     !isProviderSetupErrorMessage(rawReason) &&
+    !isBifrostKeyWarning &&
     rawReason !== DEFAULT_ONBOARDING_REASON &&
     rawReason !== DEFAULT_MANUAL_ONBOARDING_REASON
       ? rawReason
@@ -345,7 +369,9 @@ export function DesktopOnboardingOverlay({
         <div className="grid gap-3 p-5">
           {reason ? <ReasonNotice reason={reason} /> : null}
           {ready ? (
-            showPicker ? (
+            !languageDone && showPicker ? (
+              <LanguageStep onContinue={() => setLanguageDone(true)} />
+            ) : showPicker ? (
               <Picker ctx={ctx} />
             ) : (
               <FlowPanel ctx={ctx} flow={flow} leaving={leaving} onBegin={finalizeOnboarding} />
@@ -444,12 +470,26 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
   const ordered = useMemo(() => (providers ? sortProviders(providers) : []), [providers])
   const hasOauth = ordered.length > 0
   const apiKeyOptions = useApiKeyCatalog()
+  // When the user clicked a specific provider row (Bifrost, Fireworks,
+  // OpenRouter), focus the key form on that single provider instead of
+  // rendering the full api_key catalog grid. The full grid is for the generic
+  // fallback when no OAuth providers loaded (apiKeyInitialEnv undefined).
+  const focusedEnvKey = localEndpoint ? 'OPENAI_BASE_URL' : apiKeyInitialEnv
+  const focusedOptions = focusedEnvKey
+    ? apiKeyOptions.filter(o => o.envKey === focusedEnvKey)
+    : apiKeyOptions
+  const formOptions = focusedOptions.length > 0 ? focusedOptions : apiKeyOptions
 
   // localEndpoint forces the key form regardless of `mode` (which a manual
   // provider refresh may flip back to 'oauth'); it preselects the local option
   // and hides the "back to sign in" link since the user came specifically to
   // configure a custom endpoint.
-  if (localEndpoint || mode === 'apikey' || !hasOauth) {
+  //
+  // Don't flip to the API-key form when providers haven't loaded yet
+  // (providers === null). An empty array (hasOauth=false) during the initial
+  // async fetch would otherwise flash the full API-key catalog before the
+  // OAuth picker (Bifrost + Nous) renders — the "double screen" bug.
+  if (localEndpoint || mode === 'apikey' || (providers !== null && !hasOauth)) {
     return (
       <div className="grid gap-3">
         <ApiKeyForm
@@ -457,7 +497,7 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
           initialEnvKey={localEndpoint ? 'OPENAI_BASE_URL' : apiKeyInitialEnv}
           onBack={() => setOnboardingMode('oauth')}
           onSave={(envKey, value, name, apiKey) => saveOnboardingApiKey(envKey, value, name, ctx, apiKey)}
-          options={apiKeyOptions}
+          options={formOptions}
         />
         {manual ? null : (
           <div className="flex justify-center pt-1">
@@ -473,8 +513,11 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
   }
 
   const select = (p: OAuthProvider) => void startProviderOAuth(p, ctx)
-  const featured = ordered.find(p => p.id === FEATURED_ID) ?? null
-  const rest = featured ? ordered.filter(p => p.id !== FEATURED_ID) : ordered
+  // Bifrost is rendered as a dedicated BifrostProviderRow above the list — exclude
+  // it from the provider list so it doesn't appear twice (once curated, once catalog).
+  const filtered = ordered.filter(p => p.id !== 'bifrost')
+  const featured = filtered.find(p => p.id === FEATURED_ID) ?? null
+  const rest = featured ? filtered.filter(p => p.id !== FEATURED_ID) : filtered
   // Collapse the secondary providers behind a disclosure whenever Nous Portal
   // is present to anchor the choice — otherwise show the full list. The
   // Fireworks/OpenRouter key rows always live behind the disclosure, so the
@@ -482,15 +525,33 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
   const collapsible = Boolean(featured)
   const showRest = !collapsible || showAll
 
+  // "Run models locally" leaves the picker for Settings -> Providers ->
+  // Local Models, where install/download live. First-run: persist the skip
+  // (same contract as ChooseLaterLink) so the blocking overlay never
+  // re-nags; manual mode just closes. window.location keeps this picker
+  // router-independent (it renders outside the route tree on first run).
+  const openLocalModels = () => {
+    if (manual) {
+      closeManualOnboarding()
+    } else {
+      dismissFirstRunOnboarding()
+    }
+
+    window.location.hash = '#/settings?tab=providers&pview=local'
+  }
+
   return (
     <div className="grid gap-2">
       <div className="grid max-h-[60dvh] gap-2 overflow-y-auto p-1">
-        {/* RU ecosystem providers — bundled in the RU edition DMG. Surface them
-            above Nous Portal so Russian users see local options first. Each row
-            opens the API-key form preselected to the provider's env var. */}
-        <RouterAiProviderRow onClick={() => openKeyForm('ROUTERAI_API_KEY')} />
-        <NeuralDeepProviderRow onClick={() => openKeyForm('NEURALDEEP_API_KEY')} />
+        {/* Bifrost Gateway — bundled in the Bifrost edition DMG. Surface it
+            above Nous Portal so users see the one-key option first. The row
+            opens the API-key form preselected to BIFROST_API_KEY (sk-bf-*). */}
+        <BifrostProviderRow onClick={() => openKeyForm('BIFROST_API_KEY')} />
         {featured ? <FeaturedProviderRow onSelect={select} provider={featured} /> : null}
+        {/* The no-account path: everything runs on this machine. Shipped
+            behind the --local launch flag. (Fireworks moved into the
+            expanded list on main.) */}
+        {$localModelsEnabled.get() ? <LocalModelsProviderRow onClick={openLocalModels} /> : null}
         {showRest ? (
           <>
             {/* Fireworks leads the expanded list, matching CANONICAL_PROVIDERS
@@ -643,27 +704,34 @@ export function ApiKeyForm({
         </Button>
       ) : null}
 
-      <div className="grid max-h-[42dvh] gap-2 overflow-y-auto p-1 sm:grid-cols-2">
-        {options.map(o => (
-          <button
-            className={cn(
-              'rounded-2xl border bg-background/60 p-3 text-left transition hover:bg-accent/50',
-              option.envKey === o.envKey ? 'border-primary ring-2 ring-primary/20' : 'border-transparent'
-            )}
-            key={o.envKey}
-            onClick={() => pick(o)}
-            type="button"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-medium">{o.name}</span>
-              {isSet?.(o.envKey) ? <Check className="size-3.5 text-muted-foreground" /> : null}
-            </div>
-            {(t.onboarding.apiKeyOptions[o.id]?.short ?? o.short) ? (
-              <p className="mt-1 text-xs text-muted-foreground">{t.onboarding.apiKeyOptions[o.id]?.short ?? o.short}</p>
-            ) : null}
-          </button>
-        ))}
-      </div>
+      {options.length > 1 ? (
+        <div className="grid max-h-[42dvh] gap-2 overflow-y-auto p-1 sm:grid-cols-2">
+          {options.map(o => (
+            <button
+              className={cn(
+                'rounded-2xl border bg-background/60 p-3 text-left transition hover:bg-accent/50',
+                option.envKey === o.envKey ? 'border-primary ring-2 ring-primary/20' : 'border-transparent'
+              )}
+              key={o.envKey}
+              onClick={() => pick(o)}
+              type="button"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-medium">{o.name}</span>
+                {isSet?.(o.envKey) ? <Check className="size-3.5 text-muted-foreground" /> : null}
+              </div>
+              {(t.onboarding.apiKeyOptions[o.id]?.short ?? o.short) ? (
+                <p className="mt-1 text-xs text-muted-foreground">{t.onboarding.apiKeyOptions[o.id]?.short ?? o.short}</p>
+              ) : null}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 px-1">
+          <KeyRound className="size-4 text-muted-foreground" />
+          <span className="text-sm font-medium">{options[0]?.name}</span>
+        </div>
+      )}
 
       <div className="grid scroll-mt-4 gap-2" ref={entryRef}>
         <div className="flex items-center justify-between gap-3">

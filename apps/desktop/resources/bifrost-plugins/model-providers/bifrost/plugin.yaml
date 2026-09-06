@@ -1,0 +1,16 @@
+name: bifrost-provider
+kind: model-provider
+version: 1.0.0
+description: "Bifrost AI Gateway — единый шлюз для LLM, image gen и search. Один ключ sk-bf-* даёт доступ ко всем провайдерам (neuraldeep, tropass, turbocloud, routerai) через Bifrost gateway."
+author: temga
+requires_env:
+  - name: BIFROST_API_KEY
+    description: "Bifrost virtual key (sk-bf-*). Получить: Bifrost UI → Virtual Keys"
+    prompt: "Bifrost API key (sk-bf-*)"
+    url: "https://router.rove-ai.ru"
+    password: true
+  - name: BIFROST_BASE_URL
+    description: "Bifrost endpoint URL (default: https://router.rove-ai.ru/v1)"
+    prompt: "Bifrost base URL"
+    url: ""
+    password: false

@@ -1,0 +1,10 @@
+name: bifrost-tts
+version: 1.0.0
+description: "Bifrost TTS — русский синтез речи через Bifrost gateway. espeech-tts (RU + омографы) и qwen3-tts (8 голосов, 10 языков). Маршрут: Bifrost → tts-proxy → NeuralDeep. Единый sk-bf-* ключ."
+author: temga
+kind: backend
+requires_env:
+  - name: BIFROST_API_KEY
+    description: "Bifrost API key (sk-bf-...). Единый ключ на все сервисы."
+    url: "https://router.rove-ai.ru"
+    secret: true

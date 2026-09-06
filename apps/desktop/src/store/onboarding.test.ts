@@ -1,3 +1,4 @@
+import { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as notifications from '@/store/notifications'
@@ -10,6 +11,7 @@ import {
   type OnboardingContext,
   refreshOnboarding,
   requestDesktopOnboarding,
+  saveOnboardingApiKey,
   saveOnboardingLocalEndpoint,
   submitOnboardingCode
 } from './onboarding'
@@ -641,5 +643,230 @@ describe('saveOnboardingLocalEndpoint', () => {
     expect(result.ok).toBe(false)
     expect(result.message).toContain('No provider can serve the selected model.')
     expect($desktopOnboarding.get().configured).not.toBe(true)
+  })
+})
+
+describe('saveOnboardingApiKey (Bifrost validation)', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+    $desktopOnboarding.set(baseState())
+  })
+
+  afterEach(() => {
+    window.localStorage.clear()
+    $desktopOnboarding.set(baseState())
+    vi.restoreAllMocks()
+  })
+
+  // A gateway that reports ready after reload.env — completeWithModelConfirm
+  // with ignoreRuntimeGate=true never calls setup.runtime_check, but
+  // fetchProviderDefaultModel still calls /api/model/options. Provide a
+  // minimal bifrost provider so the model-confirm step has something to show.
+  function bifrostReadyGateway(): OnboardingContext['requestGateway'] {
+    return async method => {
+      if (method === 'reload.env') {
+        return {} as never
+      }
+
+      throw new Error(`unexpected gateway method: ${method}`)
+    }
+  }
+
+  it('blocks a rejected Bifrost key before saving it to .env', async () => {
+    const calls: string[] = []
+    installApiMock(async ({ path }: { path: string }) => {
+      calls.push(path)
+
+      if (path === '/api/providers/validate') {
+        return { ok: false, reachable: true, message: 'That API key was rejected.', models: [] }
+      }
+
+      throw new Error(`unexpected api path: ${path}`)
+    })
+
+    const result = await saveOnboardingApiKey('BIFROST_API_KEY', 'sk-bf-bogus', 'Bifrost Gateway', {
+      requestGateway: bifrostReadyGateway()
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('rejected')
+    // Must NOT persist the bad key.
+    expect(calls).not.toContain('/api/env')
+  })
+
+  it('saves a valid Bifrost key and advances to model confirmation', async () => {
+    const calls: { body?: unknown; path: string }[] = []
+    const model = 'turbocloud/glm-5.2'
+
+    installApiMock(async ({ body, path }: { body?: unknown; path: string }) => {
+      calls.push({ body, path })
+
+      if (path === '/api/providers/validate') {
+        return { ok: true, reachable: true, message: '', models: [] }
+      }
+
+      if (path === '/api/env') {
+        return { ok: true }
+      }
+
+      if (path.startsWith('/api/model/options')) {
+        return { providers: [{ name: 'Bifrost Gateway', slug: 'bifrost', models: [model] }] }
+      }
+
+      if (path.startsWith('/api/model/recommended-default?')) {
+        return { provider: 'bifrost', model, free_tier: false }
+      }
+
+      if (path === '/api/model/set') {
+        return { ok: true, provider: 'bifrost', model, gateway_tools: [] }
+      }
+
+      throw new Error(`unexpected api path: ${path}`)
+    })
+
+    const result = await saveOnboardingApiKey('BIFROST_API_KEY', 'sk-bf-real', 'Bifrost Gateway', {
+      requestGateway: bifrostReadyGateway()
+    })
+
+    expect(result.ok).toBe(true)
+    // The key was validated before being persisted.
+    const validateIndex = calls.findIndex(c => c.path === '/api/providers/validate')
+    const envIndex = calls.findIndex(c => c.path === '/api/env')
+    expect(validateIndex).toBeGreaterThanOrEqual(0)
+    expect(envIndex).toBeGreaterThan(validateIndex)
+    // Advanced to model confirmation.
+    expect($desktopOnboarding.get().flow.status).toBe('confirming_model')
+  })
+
+  it('proceeds to save when the probe cannot reach the gateway (offline tolerance)', async () => {
+    const calls: string[] = []
+    const model = 'turbocloud/glm-5.2'
+
+    installApiMock(async ({ path }: { path: string }) => {
+      calls.push(path)
+
+      if (path === '/api/providers/validate') {
+        return { ok: false, reachable: false, message: 'Could not reach the provider.' }
+      }
+
+      if (path === '/api/env') {
+        return { ok: true }
+      }
+
+      if (path.startsWith('/api/model/options')) {
+        return { providers: [{ name: 'Bifrost Gateway', slug: 'bifrost', models: [model] }] }
+      }
+
+      if (path.startsWith('/api/model/recommended-default?')) {
+        return { provider: 'bifrost', model, free_tier: false }
+      }
+
+      if (path === '/api/model/set') {
+        return { ok: true, provider: 'bifrost', model, gateway_tools: [] }
+      }
+
+      throw new Error(`unexpected api path: ${path}`)
+    })
+
+    const result = await saveOnboardingApiKey('BIFROST_API_KEY', 'sk-bf-real', 'Bifrost Gateway', {
+      requestGateway: bifrostReadyGateway()
+    })
+
+    expect(result.ok).toBe(true)
+    expect(calls).toContain('/api/env')
+  })
+})
+
+describe('device-code poll expiry', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+    $desktopOnboarding.set(baseState())
+  })
+
+  afterEach(() => {
+    window.localStorage.clear()
+    $desktopOnboarding.set(baseState())
+    vi.restoreAllMocks()
+    vi.useRealTimers()
+  })
+
+  function deviceCodeProvider() {
+    // makeOAuthProvider builds a pkce provider; device-code flows need the
+    // device_code branch instead.
+    return { ...makeOAuthProvider('nous', 'Nous Portal'), flow: 'device_code' as const }
+  }
+
+  function deviceStart(expiresIn: number) {
+    return {
+      expires_in: expiresIn,
+      flow: 'device_code',
+      poll_interval: 5,
+      session_id: 'device-sess-1',
+      user_code: 'ABCD-EFGH',
+      verification_url: 'https://portal.example/device'
+    }
+  }
+
+  it('lapses to an error with actionable guidance when the window expires still pending', async () => {
+    vi.useFakeTimers()
+    installApiMock(async ({ path }: { path: string }) => {
+      if (path === '/api/providers/oauth/nous/start') {
+        return deviceStart(2)
+      }
+
+      if (path === '/api/providers/oauth/nous/poll/device-sess-1') {
+        return { status: 'pending' }
+      }
+
+      throw new Error(`unexpected api path: ${path}`)
+    })
+
+    const { startProviderOAuth } = await import('./onboarding')
+    await startProviderOAuth(deviceCodeProvider(), onboardingContext(emptyOpenRouterGateway()))
+
+    expect($desktopOnboarding.get().flow.status).toBe('polling')
+
+    // Let both the poll interval and the expiry window lapse.
+    await act(async () => {
+      vi.advanceTimersByTime(3000)
+    })
+
+    const flow = $desktopOnboarding.get().flow
+    expect(flow.status).toBe('error')
+
+    if (flow.status === 'error') {
+      expect(flow.message).toContain('Sign-in expired waiting for authorization')
+    }
+  })
+
+  it('keeps polling while the window is open and clears the expiry on cancel', async () => {
+    vi.useFakeTimers()
+    installApiMock(async ({ path }: { path: string }) => {
+      if (path === '/api/providers/oauth/nous/start') {
+        return deviceStart(600)
+      }
+
+      if (path === '/api/providers/oauth/nous/poll/device-sess-1') {
+        return { status: 'pending' }
+      }
+
+      throw new Error(`unexpected api path: ${path}`)
+    })
+
+    const { startProviderOAuth, cancelOnboardingFlow } = await import('./onboarding')
+    await startProviderOAuth(deviceCodeProvider(), onboardingContext(emptyOpenRouterGateway()))
+
+    await act(async () => {
+      vi.advanceTimersByTime(10_000)
+    })
+    expect($desktopOnboarding.get().flow.status).toBe('polling')
+
+    cancelOnboardingFlow()
+    // Far past the original window: the cancelled flow must not flip to an
+    // expiry error after the fact.
+    await act(async () => {
+      vi.advanceTimersByTime(700_000)
+    })
+    expect($desktopOnboarding.get().flow.status).toBe('idle')
   })
 })

@@ -11,6 +11,7 @@ import {
   submitOAuthCode,
   validateProviderCredential
 } from '@/hermes'
+import { translateNow } from '@/i18n'
 import { isProviderSetupErrorMessage } from '@/lib/provider-setup-errors'
 import { evaluateRuntimeReadiness, type RuntimeReadinessResult } from '@/lib/runtime-readiness'
 import { setMainModelAssignment } from '@/store/cron-model-impact'
@@ -175,6 +176,30 @@ function clearPoll() {
     window.clearInterval(pollTimer)
     pollTimer = null
   }
+
+  clearPollExpiry()
+}
+
+let pollExpiryTimer: number | null = null
+
+function clearPollExpiry() {
+  if (pollExpiryTimer !== null) {
+    window.clearTimeout(pollExpiryTimer)
+    pollExpiryTimer = null
+  }
+}
+
+/** Lapse a device-code session locally when its window expires, instead of
+ * polling a dead session forever. Uses the flow's own `expires_in`; the
+ * backend poller may still flip the session to error first, and its message
+ * (surfaced by `pollSession`) is preferred whenever it arrives in time. */
+function schedulePollExpiry(start: DeviceStart, onExpire: () => void) {
+  clearPollExpiry()
+  const ttlMs = Math.max(1, Number(start.expires_in) || 0) * 1000
+  pollExpiryTimer = window.setTimeout(() => {
+    pollExpiryTimer = null
+    onExpire()
+  }, ttlMs)
 }
 
 async function checkRuntime(ctx: OnboardingContext, requestedProvider?: string): Promise<RuntimeReadinessResult> {
@@ -318,10 +343,16 @@ async function completeWithModelConfirm(
     // config provider (e.g. anthropic from a prior failed setup) cannot make
     // setup.runtime_check validate the wrong backend after a fresh OAuth login.
     try {
-      const res = await setMainModelAssignment({
-        provider: defaults.providerSlug,
-        model: defaults.defaultModel
-      })
+      const res = await setMainModelAssignment(
+        {
+          provider: defaults.providerSlug,
+          model: defaults.defaultModel
+        },
+        undefined,
+        // Headless automated flow: nothing is mounted to click a guard
+        // prompt, so fail with the message instead of hanging.
+        { skipConfirmPrompt: true }
+      )
 
       notifyGatewayTools(res.gateway_tools)
     } catch (error) {
@@ -624,6 +655,14 @@ export async function startProviderOAuth(provider: OAuthProvider, ctx: Onboardin
     }
 
     setFlow({ status: 'polling', provider, start, copied: false })
+    schedulePollExpiry(start, () =>
+      setFlow({
+        status: 'error',
+        provider,
+        start,
+        message: translateNow('onboarding.signInExpired')
+      })
+    )
     pollTimer = window.setInterval(() => void pollSession(provider, start, ctx), POLL_MS)
   } catch (error) {
     setFlow({ status: 'error', provider, message: `Could not start sign-in: ${errMessage(error)}` })
@@ -797,6 +836,25 @@ export async function saveOnboardingApiKey(
   // legitimate users (corporate proxies, regional blocks, flaky/rate-limited
   // provider probes, self-hosted endpoints). We now save the value as-is and
   // let the user proceed; an actually-bad key surfaces later at chat time.
+  //
+  // Exception: BIFROST_API_KEY. The Bifrost gateway is our own infrastructure
+  // (router.rove-ai.ru), not behind corporate proxies or regional blocks, so a
+  // 401/403 from its /v1/models probe definitively means a bad key. Validating
+  // here catches mistyped keys at onboarding instead of letting the user
+  // discover the failure at first chat. Network errors (reachable=false) still
+  // don't block — same offline-tolerance contract as the local endpoint path.
+  if (envKey === 'BIFROST_API_KEY') {
+    try {
+      const probe = await validateProviderCredential(envKey, trimmed)
+
+      if (!probe.ok && probe.reachable) {
+        return { ok: false, message: probe.message || 'That API key was rejected by Bifrost.' }
+      }
+    } catch {
+      // Probe couldn't run at all — proceed to save (offline tolerance).
+    }
+  }
+
   try {
     await setEnvVar(envKey, trimmed)
     // For API-key flows we don't have a definitive provider id (the

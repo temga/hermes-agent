@@ -535,18 +535,19 @@ class TestHasAnyProviderConfigured:
         monkeypatch.setattr("hermes_cli.auth.get_auth_status", lambda _pid: {})
         # Simulate valid Claude Code credentials
         monkeypatch.setattr(
-            "agent.anthropic_adapter.read_claude_code_credentials",
+            "agent.anthropic_credentials.read_claude_code_credentials",
             lambda: {"accessToken": "sk-ant-test", "refreshToken": "ref-tok"},
         )
         monkeypatch.setattr(
-            "agent.anthropic_adapter.is_claude_code_token_valid",
+            "agent.anthropic_credentials.is_claude_code_token_valid",
             lambda creds: True,
         )
         from hermes_cli.main import _has_any_provider_configured
         assert _has_any_provider_configured() is False
 
     def test_config_provider_counts(self, monkeypatch, tmp_path):
-        """config.yaml with model.provider set should count as configured."""
+        """config.yaml with model.provider set should count as configured
+        when the corresponding API key is in the environment."""
         import yaml
         from hermes_cli import config as config_module
         hermes_home = tmp_path / ".hermes"
@@ -558,10 +559,12 @@ class TestHasAnyProviderConfigured:
         monkeypatch.setattr(config_module, "get_env_path", lambda: hermes_home / ".env")
         monkeypatch.setattr(config_module, "get_hermes_home", lambda: hermes_home)
         monkeypatch.setenv("HERMES_HOME", str(hermes_home))
-        # Clear all provider env vars
-        for var in ("OPENROUTER_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
+        # Clear all provider env vars except the one we set
+        for var in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY",
                      "ANTHROPIC_TOKEN", "OPENAI_BASE_URL"):
             monkeypatch.delenv(var, raising=False)
+        # Provider is set in config AND the key exists in env → configured
+        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
         from hermes_cli.main import _has_any_provider_configured
         assert _has_any_provider_configured() is True
 
@@ -588,8 +591,8 @@ class TestHasAnyProviderConfigured:
         return hermes_home
 
     def test_config_provider_skips_registry_sweep(self, monkeypatch, tmp_path):
-        """model.provider in config.yaml must short-circuit BEFORE the slow
-        provider-registry sweep (gh subprocess etc.) is ever invoked.
+        """model.provider + matching API key in config.yaml must short-circuit
+        BEFORE the slow provider-registry sweep (gh subprocess etc.) is invoked.
 
         Regression test for the auth-first ordering: get_auth_status is
         booby-trapped to fail loudly if the sweep runs. The sweep wraps its
@@ -601,6 +604,8 @@ class TestHasAnyProviderConfigured:
         (hermes_home / "config.yaml").write_text(yaml.dump({
             "model": {"default": "anthropic/claude-opus-4.6", "provider": "openrouter"},
         }))
+        # Set the API key in env so the provider is actually configured
+        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
         sweep_calls = []
 
         def _trap(provider_id):
@@ -638,6 +643,70 @@ class TestHasAnyProviderConfigured:
         assert sweep_calls == [], (
             f"provider registry sweep ran before config short-circuit: {sweep_calls}"
         )
+
+    def test_bifrost_provider_without_key_is_not_configured(self, monkeypatch, tmp_path):
+        """Bifrost provider + base_url in config but NO BIFROST_API_KEY anywhere
+        must NOT count as configured — install.sh / bifrost-plugins-bootstrap.ts
+        set provider+base_url at install time, before the user has entered a key.
+        Onboarding must still appear so the user can enter their sk-bf-* key.
+        """
+        import yaml
+        hermes_home = self._setup_home(monkeypatch, tmp_path)
+        (hermes_home / "config.yaml").write_text(yaml.dump({
+            "model": {
+                "default": "neuraldeep/gpt-oss-120b",
+                "provider": "bifrost",
+                "base_url": "https://router.rove-ai.ru/v1",
+            },
+        }))
+        # Prevent provider-specific auth fallbacks (e.g. gh auth on the test
+        # machine) from short-circuiting to True. We are testing the config-only
+        # path: provider+base_url without a key must NOT count as configured.
+        monkeypatch.setattr("hermes_cli.auth.get_auth_status", lambda _pid: {})
+        # Ensure bifrost is in PROVIDER_REGISTRY even if the plugin isn't
+        # installed in the test's tmp HERMES_HOME (auto-extend only runs when
+        # the plugin directory exists).
+        self._ensure_bifrost_in_registry(monkeypatch)
+        # BIFROST_API_KEY is cleared by _clear_provider_env
+        from hermes_cli.main import _has_any_provider_configured
+        assert _has_any_provider_configured() is False
+
+    def test_bifrost_provider_with_key_is_configured(self, monkeypatch, tmp_path):
+        """Bifrost provider + BIFROST_API_KEY in env → configured."""
+        import yaml
+        hermes_home = self._setup_home(monkeypatch, tmp_path)
+        (hermes_home / "config.yaml").write_text(yaml.dump({
+            "model": {
+                "default": "neuraldeep/gpt-oss-120b",
+                "provider": "bifrost",
+                "base_url": "https://router.rove-ai.ru/v1",
+            },
+        }))
+        monkeypatch.setenv("BIFROST_API_KEY", "sk-bf-test")
+        monkeypatch.setattr("hermes_cli.auth.get_auth_status", lambda _pid: {})
+        self._ensure_bifrost_in_registry(monkeypatch)
+        from hermes_cli.main import _has_any_provider_configured
+        assert _has_any_provider_configured() is True
+
+    @staticmethod
+    def _ensure_bifrost_in_registry(monkeypatch):
+        """Add bifrost to PROVIDER_REGISTRY if auto-extend hasn't run.
+
+        In the test environment HERMES_HOME is a tmp dir with no plugins,
+        so the bifrost plugin never loads and PROVIDER_REGISTRY lacks the
+        entry. _has_any_provider_configured() needs the entry to resolve
+        api_key_env_vars for the configured provider.
+        """
+        from hermes_cli.auth import PROVIDER_REGISTRY, ProviderConfig
+        if "bifrost" not in PROVIDER_REGISTRY:
+            PROVIDER_REGISTRY["bifrost"] = ProviderConfig(
+                id="bifrost",
+                name="Bifrost Gateway",
+                auth_type="api_key",
+                inference_base_url="https://router.rove-ai.ru/v1",
+                api_key_env_vars=("BIFROST_API_KEY",),
+                base_url_env_var="",
+            )
 
     def test_auth_json_skips_registry_sweep(self, monkeypatch, tmp_path):
         """auth.json with a logged-in active provider must short-circuit before
@@ -842,14 +911,14 @@ class TestKimiMoonshotModelListIsolation:
     """Moonshot (legacy) users must not see Coding Plan-only models."""
 
     def test_moonshot_list_excludes_coding_plan_only_models(self):
-        from hermes_cli.main import _PROVIDER_MODELS
+        from hermes_cli.models import _PROVIDER_MODELS
         moonshot_models = _PROVIDER_MODELS["moonshot"]
         coding_plan_only = {"kimi-for-coding", "kimi-k2-thinking-turbo"}
         leaked = set(moonshot_models) & coding_plan_only
         assert not leaked, f"Moonshot list contains Coding Plan-only models: {leaked}"
 
     def test_moonshot_list_non_empty(self):
-        from hermes_cli.main import _PROVIDER_MODELS
+        from hermes_cli.models import _PROVIDER_MODELS
         assert len(_PROVIDER_MODELS["moonshot"]) >= 1
 
 
@@ -863,7 +932,7 @@ class TestHuggingFaceModels:
 
     def test_model_lists_match(self):
         """Model lists in main.py and models.py should be identical."""
-        from hermes_cli.main import _PROVIDER_MODELS as main_models
+        from hermes_cli.models import _PROVIDER_MODELS as main_models
         from hermes_cli.models import _PROVIDER_MODELS as models_models
         assert main_models["huggingface"] == models_models["huggingface"]
 
@@ -902,9 +971,10 @@ class TestNovitaProvider:
     def test_novita_pricing_cache(self, monkeypatch):
         """_fetch_novita_pricing should cache results in _pricing_cache."""
         from hermes_cli import models as models_mod
+        from hermes_cli import models_pricing
         monkeypatch.setenv("NOVITA_API_KEY", "sk-test-key")
         monkeypatch.setenv("NOVITA_BASE_URL", "https://api.novita.ai/openai/v1")
-        models_mod._pricing_cache.pop("https://api.novita.ai/openai/v1", None)
+        models_pricing._pricing_cache.pop("https://api.novita.ai/openai/v1", None)
 
         call_count = {"n": 0}
         fake_payload = {
@@ -937,17 +1007,17 @@ class TestNovitaProvider:
         )
 
         # First call hits the network.
-        first = models_mod._fetch_novita_pricing()
+        first = models_pricing._fetch_novita_pricing()
         assert "x/y" in first
         assert call_count["n"] == 1
 
         # Second call returns cached result without re-hitting the network.
-        second = models_mod._fetch_novita_pricing()
+        second = models_pricing._fetch_novita_pricing()
         assert second == first
         assert call_count["n"] == 1
 
         # force_refresh bypasses the cache.
-        models_mod._fetch_novita_pricing(force_refresh=True)
+        models_pricing._fetch_novita_pricing(force_refresh=True)
         assert call_count["n"] == 2
 
 
@@ -1004,6 +1074,7 @@ def _deepinfra_cache_isolation(monkeypatch):
     a later test's fetch within the failure TTL.
     """
     import hermes_cli.models as _models_mod
+    from hermes_cli import models_pricing
     monkeypatch.setattr(_models_mod, "_deepinfra_catalog_cache", {})
     monkeypatch.setattr(_models_mod, "_deepinfra_catalog_neg_cache", {})
     yield
@@ -1030,6 +1101,7 @@ class TestFetchDeepInfraModels:
                 ]}).encode()
 
         import hermes_cli.models as models
+        from hermes_cli import models_pricing
         monkeypatch.setattr(
             models, "_urlopen_model_catalog_request", lambda *a, **kw: _Resp()
         )
@@ -1047,6 +1119,7 @@ class TestFetchDeepInfraModels:
 
     def test_catalog_uses_credential_safe_opener(self, monkeypatch):
         import hermes_cli.models as models
+        from hermes_cli import models_pricing
 
         seen = {}
 
@@ -1119,6 +1192,7 @@ class TestDeepInfraTagFiltering:
         ]}
         from hermes_cli.models import _fetch_deepinfra_models_by_tag
         import hermes_cli.models as _m
+        from hermes_cli import models_pricing
 
         for surface in ("chat", "image-gen", "tts", "stt", "embed"):
             monkeypatch.setattr(
@@ -1171,12 +1245,13 @@ class TestDeepInfraPricingFetcher:
             {"id": "vendor/model-image", "metadata": {"tags": ["image-gen"], "pricing": {"per_image_unit": 0.05}}},
         ]}
         import hermes_cli.models as models
+        from hermes_cli import models_pricing
         monkeypatch.setattr(
             models,
             "_urlopen_model_catalog_request",
             _make_urlopen_returning(payload),
         )
-        from hermes_cli.models import get_pricing_for_provider
+        from hermes_cli.models_pricing import get_pricing_for_provider
 
         # get_pricing_for_provider → _fetch_deepinfra_pricing dispatch path
         result = get_pricing_for_provider("deepinfra")
@@ -1217,3 +1292,46 @@ class TestDeepInfraProviderProfile:
         # of truth. Pin the shape only, not contents.
         assert isinstance(profile.fallback_models, tuple)
 
+
+
+class TestRuntimeAlibabaRegionalAndTokenPlan:
+    """#73265: the catalog-advertised Alibaba China/Token Plan variants must
+    resolve on the shared execution path (resolve_runtime_provider), not just
+    in the profile registry — provider, key, api mode, and base URL."""
+
+    def test_runtime_alibaba_cn(self, monkeypatch):
+        monkeypatch.setenv("DASHSCOPE_API_KEY", "ds-key")
+        from hermes_cli.runtime_provider import resolve_runtime_provider
+        result = resolve_runtime_provider(requested="alibaba-cn")
+        assert result["provider"] == "alibaba-cn"
+        assert result["api_mode"] == "chat_completions"
+        assert result["api_key"] == "ds-key"
+        assert result["base_url"] == "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+    def test_runtime_alibaba_coding_plan_cn(self, monkeypatch):
+        monkeypatch.setenv("ALIBABA_CODING_PLAN_API_KEY", "acp-key")
+        monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+        from hermes_cli.runtime_provider import resolve_runtime_provider
+        result = resolve_runtime_provider(requested="alibaba-coding-plan-cn")
+        assert result["provider"] == "alibaba-coding-plan-cn"
+        assert result["api_mode"] == "chat_completions"
+        assert result["api_key"] == "acp-key"
+        assert result["base_url"] == "https://coding.dashscope.aliyuncs.com/v1"
+
+    def test_runtime_alibaba_token_plan(self, monkeypatch):
+        monkeypatch.setenv("ALIBABA_TOKEN_PLAN_API_KEY", "atp-key")
+        from hermes_cli.runtime_provider import resolve_runtime_provider
+        result = resolve_runtime_provider(requested="alibaba-token-plan")
+        assert result["provider"] == "alibaba-token-plan"
+        assert result["api_mode"] == "chat_completions"
+        assert result["api_key"] == "atp-key"
+        assert result["base_url"] == "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1"
+
+    def test_runtime_alibaba_token_plan_cn(self, monkeypatch):
+        monkeypatch.setenv("ALIBABA_TOKEN_PLAN_API_KEY", "atp-key")
+        from hermes_cli.runtime_provider import resolve_runtime_provider
+        result = resolve_runtime_provider(requested="alibaba-token-plan-cn")
+        assert result["provider"] == "alibaba-token-plan-cn"
+        assert result["api_mode"] == "chat_completions"
+        assert result["api_key"] == "atp-key"
+        assert result["base_url"] == "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
