@@ -3502,7 +3502,7 @@ print("Configured all service providers -> bifrost")
     # Write stamp
     $stampDir = Split-Path $bfStamp -Parent
     if (-not (Test-Path $stampDir)) { New-Item -ItemType Directory -Force -Path $stampDir | Out-Null }
-    (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ" -AsUTC) | Set-Content $bfStamp -NoNewline
+    (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ") | Set-Content $bfStamp -NoNewline
 
     Write-Success "Installed $copied Bifrost plugins to $HermesHome\plugins\"
     Write-Info "One BIFROST_API_KEY (sk-bf-*) powers LLM + image gen + web + STT + TTS"
