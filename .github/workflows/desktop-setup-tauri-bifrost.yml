@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   build-mac:
-    runs-on: self-hosted
+    runs-on: [self-hosted, macOS]
     timeout-minutes: 30
 
     steps:
@@ -181,11 +181,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-windows:
-    # Disabled: GitHub-hosted Windows runners require paid minutes, which are
-    # not available on a fork. Re-enable with `if: true` when a Windows
-    # self-hosted runner is registered or the account has paid minutes.
-    if: false
-    runs-on: windows-latest
+    runs-on: [self-hosted, Windows]
     timeout-minutes: 45
 
     steps:
