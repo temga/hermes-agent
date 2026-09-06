@@ -185,7 +185,7 @@ jobs:
     timeout-minutes: 45
     defaults:
       run:
-        shell: C:\Program Files\Git\bin\bash.exe --noprofile --norc -e -o pipefail {0}
+        shell: C:/Program Files/Git/bin/bash.exe --noprofile --norc -e -o pipefail {0}
 
     steps:
       - name: Checkout (manual clone — no actions/* downloads)
