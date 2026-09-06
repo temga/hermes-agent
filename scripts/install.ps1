@@ -3358,13 +3358,18 @@ function Install-BifrostPlugins {
     New-Item -ItemType Directory -Force -Path $pluginsDir | Out-Null
 
     # Clone (or update) the Bifrost plugin repo
+    # NOTE: git writes "Cloning into..." to stderr. Under $ErrorActionPreference=Stop
+    # (global in install.ps1), PowerShell turns stderr lines into terminating errors
+    # BEFORE $LASTEXITCODE is checked — so a successful clone is misread as failure.
+    # Invoke-NativeWithRelaxedErrorAction temporarily sets EAP=Continue, same as
+    # Install-Repository does for its own git clone calls.
     if ((Test-Path (Join-Path $bfCloneDir ".git"))) {
         Write-Info "Updating Bifrost plugin cache..."
-        & git -C $bfCloneDir pull --ff-only 2>&1 | Out-Null
+        Invoke-NativeWithRelaxedErrorAction { & git -C $bfCloneDir pull --ff-only 2>&1 | Out-Null }
     } else {
         Write-Info "Cloning Bifrost plugin pack..."
         if (Test-Path $bfCloneDir) { Remove-Item -Recurse -Force $bfCloneDir }
-        & git clone --depth 1 $bfRepoUrl $bfCloneDir 2>&1 | Out-Null
+        Invoke-NativeWithRelaxedErrorAction { & git clone --depth 1 $bfRepoUrl $bfCloneDir 2>&1 | Out-Null }
         if ($LASTEXITCODE -ne 0) {
             Write-Err "Failed to clone Bifrost plugins — they will not be available"
             Write-Info "You can install them manually later from $bfRepoUrl"
