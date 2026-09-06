@@ -185,7 +185,7 @@ jobs:
     timeout-minutes: 45
     defaults:
       run:
-        shell: pwsh
+        shell: powershell
 
     steps:
       - name: Checkout (manual clone — no actions/* downloads)
