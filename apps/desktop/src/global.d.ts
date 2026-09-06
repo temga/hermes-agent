@@ -592,6 +592,9 @@ export interface DesktopVersionInfo {
   nodeVersion: string
   platform: string
   hermesRoot: string
+  /** Canonical GitHub URL for the origin remote (e.g. `https://github.com/temga/hermes-agent`).
+   *  Null for non-GitHub remotes; the About panel falls back to the upstream URL. */
+  repoUrl?: string | null
   /** True when the running renderer bundle predates desktop changes in the
    *  installed source tree (runtime updated, app binary not rebuilt/swapped). */
   bundleOutOfSync?: boolean
@@ -637,6 +640,9 @@ export interface DesktopUpdateStatus {
   supported: boolean
   updateAvailable?: boolean
   branch?: string
+  /** Canonical GitHub URL for the origin remote (e.g. `https://github.com/temga/hermes-agent`).
+   *  Null for non-GitHub remotes; the About panel falls back to the upstream URL. */
+  repoUrl?: string | null
   currentBranch?: string
   reason?: string
   message?: string

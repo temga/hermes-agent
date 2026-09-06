@@ -71,6 +71,17 @@ function canonicalRemoteForCompare(originUrl) {
   return match ? match[1] : null
 }
 
+// Build a canonical `https://github.com/<owner>/<repo>` URL from a git remote
+// (SSH or HTTPS). Returns null for non-GitHub remotes so callers can fall back
+// to a sensible default instead of rendering a broken link. Used by the About
+// panel to point release-notes / installer links at the fork the user actually
+// tracks, not a hardcoded upstream URL.
+function repoOriginUrl(originUrl) {
+  const canonical = canonicalRemoteForCompare(originUrl)
+
+  return canonical ? `https://github.com/${canonical}` : null
+}
+
 // `ahead_by` counts target commits not reachable from current — the behind
 // count. `status` is "ahead" / "behind" / "diverged" / "identical" relative to
 // current...target; any shape surprise returns null so the caller keeps the
@@ -89,4 +100,4 @@ function parseCompareBehindCount(payload) {
   return ahead
 }
 
-export { compareApiUrl, parseCompareBehindCount, resolveBehindCount, resolveCommitLogSelection, shouldCountCommits }
+export { canonicalRemoteForCompare, compareApiUrl, parseCompareBehindCount, repoOriginUrl, resolveBehindCount, resolveCommitLogSelection, shouldCountCommits }

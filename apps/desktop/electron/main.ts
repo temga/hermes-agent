@@ -385,6 +385,7 @@ import {
 import {
   compareApiUrl,
   parseCompareBehindCount,
+  repoOriginUrl,
   resolveBehindCount,
   resolveCommitLogSelection,
   shouldCountCommits
@@ -3083,6 +3084,9 @@ async function checkUpdates() {
 
   branch = await resolveHealedBranch(updateRoot, branch)
   const originUrl = await getOriginUrl(updateRoot)
+  // Canonical GitHub URL for the origin remote (e.g. `https://github.com/temga/hermes-agent`).
+  // Null for non-GitHub remotes; the About panel falls back to the upstream URL.
+  const repoUrl = repoOriginUrl(originUrl)
 
   if (isOfficialSshRemote(originUrl)) {
     const git = args => runGit(args, { cwd: updateRoot }).then(r => r.stdout.trim())
@@ -3100,6 +3104,7 @@ async function checkUpdates() {
       return {
         supported: true,
         branch,
+        repoUrl,
         error: 'fetch-failed',
         message: firstLine(target.stderr) || 'git ls-remote failed.',
         hermesRoot: updateRoot,
@@ -3125,6 +3130,7 @@ async function checkUpdates() {
     return {
       supported: true,
       branch,
+      repoUrl,
       currentBranch,
       behind: upToDate ? 0 : sshBehind,
       updateAvailable: !upToDate,
@@ -3149,6 +3155,7 @@ async function checkUpdates() {
     return {
       supported: true,
       branch,
+      repoUrl,
       error: 'fetch-failed',
       message: firstLine(fetched.stderr) || 'git fetch failed.',
       hermesRoot: updateRoot,
@@ -3204,6 +3211,7 @@ async function checkUpdates() {
   return {
     supported: true,
     branch,
+    repoUrl,
     currentBranch,
     behind,
     updateAvailable: behind === null || behind > 0,
@@ -17527,13 +17535,21 @@ function showAboutPanelFresh() {
 
 ipcMain.handle('hermes:version', async () => {
   const skew = await detectRendererSkew()
+  const updateRoot = resolveUpdateRoot()
+  // Resolve the origin repo URL once here so the About panel can point
+  // release-notes/installer links at the fork the user actually tracks, without
+  // waiting for the first update check. Non-GitHub remotes yield null and the
+  // About panel falls back to the upstream URL.
+  const originUrl = await getOriginUrl(updateRoot).catch(() => '')
+  const repoUrl = repoOriginUrl(originUrl)
 
   return {
     appVersion: resolveHermesVersion(),
     electronVersion: process.versions.electron,
     nodeVersion: process.versions.node,
     platform: process.platform,
-    hermesRoot: resolveUpdateRoot(),
+    hermesRoot: updateRoot,
+    repoUrl,
     bundleOutOfSync: skew.outOfSync,
     bundleCommitsBehind: skew.desktopCommitsBehind,
     // True when the bundle on disk is not the one this process loaded — a

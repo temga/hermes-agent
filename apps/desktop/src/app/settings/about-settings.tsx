@@ -21,8 +21,15 @@ import {
 import { ListRow, SectionHeading, SettingsContent } from './primitives'
 import { UninstallSection } from './uninstall-section'
 
-const RELEASE_NOTES_URL = 'https://github.com/NousResearch/hermes-agent/releases'
-const INSTALLER_URL = 'https://hermes-agent.nousresearch.com/'
+const DEFAULT_RELEASE_NOTES_URL = 'https://github.com/NousResearch/hermes-agent/releases'
+const DEFAULT_INSTALLER_URL = 'https://hermes-agent.nousresearch.com/'
+
+// Resolve the release-notes URL from the origin repo the user actually tracks.
+// Falls back to the upstream URL when the repo URL is unknown (non-GitHub
+// remote, pre-check state, or a checkout without a git remote).
+function releaseNotesUrl(repoUrl: string | null | undefined): string {
+  return repoUrl ? `${repoUrl}/releases` : DEFAULT_RELEASE_NOTES_URL
+}
 
 function relativeTime(ms: number | undefined, a: Translations['settings']['about']) {
   if (!ms) {
@@ -69,6 +76,12 @@ export function AboutSettings() {
   const updateAvailable = behind > 0 || Boolean(status?.updateAvailable)
   const supported = status?.supported !== false
   const applying = apply.applying || apply.stage === 'restart'
+
+  // Prefer the repo URL from the update status (fresh check); fall back to the
+  // version info resolved at app boot so links are correct before the first
+  // check completes.
+  const repoUrl = status?.repoUrl ?? version?.repoUrl ?? null
+  const releaseNotes = releaseNotesUrl(repoUrl)
 
   const handleCheck = async () => {
     setJustChecked(false)
@@ -137,10 +150,10 @@ export function AboutSettings() {
                     <p className="mt-1 text-xs text-muted-foreground">{a.bundleOutOfSyncDesc}</p>
                     <Button asChild className="mt-2" size="sm" variant="textStrong">
                       <a
-                        href={INSTALLER_URL}
+                        href={DEFAULT_INSTALLER_URL}
                         onClick={event => {
                           event.preventDefault()
-                          void window.hermesDesktop?.openExternal?.(INSTALLER_URL)
+                          void window.hermesDesktop?.openExternal?.(DEFAULT_INSTALLER_URL)
                         }}
                         rel="noreferrer"
                         target="_blank"
@@ -207,10 +220,10 @@ export function AboutSettings() {
 
             <Button asChild className="ml-auto" size="sm" variant="text">
               <a
-                href={RELEASE_NOTES_URL}
+                href={releaseNotes}
                 onClick={event => {
                   event.preventDefault()
-                  void window.hermesDesktop?.openExternal?.(RELEASE_NOTES_URL)
+                  void window.hermesDesktop?.openExternal?.(releaseNotes)
                 }}
                 rel="noreferrer"
                 target="_blank"
