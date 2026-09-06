@@ -129,6 +129,7 @@ jobs:
           codesign -dv --verbose=4 "$RENAMED" 2>&1 || true
 
       - name: Save DMG as artifact (always)
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: Hermes-Setup-Bifrost-dmg
