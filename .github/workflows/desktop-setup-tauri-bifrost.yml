@@ -185,57 +185,56 @@ jobs:
     timeout-minutes: 45
     defaults:
       run:
-        shell: C:/Program Files/Git/bin/bash.exe --noprofile --norc -e -o pipefail {0}
+        shell: pwsh
 
     steps:
       - name: Checkout (manual clone — no actions/* downloads)
         run: |
-          set -euo pipefail
-          REF="${{ inputs.ref || github.ref }}"
-          REF_NAME="${REF#refs/heads/}"
-          REF_NAME="${REF_NAME#refs/tags/}"
-          echo "Cloning ref: $REF_NAME"
+          $ErrorActionPreference = 'Stop'
+          $Ref = '${{ inputs.ref || github.ref }}'
+          $RefName = $Ref -replace '^refs/heads/', '' -replace '^refs/tags/', ''
+          Write-Host "Cloning ref: $RefName"
           # Self-hosted runner workspace may have leftovers from previous runs.
-          find . -mindepth 1 -delete 2>/dev/null || true
-          git clone --depth 1 --branch "$REF_NAME" "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" .
+          Get-ChildItem -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+          git clone --depth 1 --branch $RefName "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY.git" .
 
       - name: Verify Rust toolchain
         run: |
-          if ! command -v rustc &>/dev/null; then
-            echo "::error::Rust not found. Install via: winget install Rustlang.Rustup"
+          if (-not (Get-Command rustc -ErrorAction SilentlyContinue)) {
+            Write-Error "::error::Rust not found. Install via: winget install Rustlang.Rustup"
             exit 1
-          fi
+          }
           rustc --version
           cargo --version
-          echo "Rust toolchain OK"
+          Write-Host "Rust toolchain OK"
 
       - name: Verify Node version
         run: |
           node --version
           npm --version
-          NODE_MAJOR=$(node -e "console.log(process.versions.node.split('.')[0])")
-          if [ "$NODE_MAJOR" -lt 20 ]; then
-            echo "::error::Node 20+ required, got $(node --version)"
+          $nodeMajor = [int]((node --version) -replace '^v', '').Split('.')[0]
+          if ($nodeMajor -lt 20) {
+            Write-Error "::error::Node 20+ required, got $(node --version)"
             exit 1
-          fi
-          echo "✓ Node $NODE_MAJOR OK"
+          }
+          Write-Host "✓ Node $nodeMajor OK"
 
       - name: Install bootstrap-installer deps
         run: |
-          cd apps/bootstrap-installer
+          Set-Location apps/bootstrap-installer
           npm ci
 
       - name: Build frontend
         run: |
-          cd apps/bootstrap-installer
+          Set-Location apps/bootstrap-installer
           npm run build
 
       - name: Build Tauri NSIS installer
         run: |
-          cd apps/bootstrap-installer
-          export HERMES_BUILD_PIN_COMMIT="$GITHUB_SHA"
-          export HERMES_BUILD_PIN_BRANCH="bifrost-edition"
-          echo "Pinning installer to commit $HERMES_BUILD_PIN_COMMIT on branch $HERMES_BUILD_PIN_BRANCH"
+          Set-Location apps/bootstrap-installer
+          $env:HERMES_BUILD_PIN_COMMIT = $env:GITHUB_SHA
+          $env:HERMES_BUILD_PIN_BRANCH = 'bifrost-edition'
+          Write-Host "Pinning installer to commit $env:HERMES_BUILD_PIN_COMMIT on branch $env:HERMES_BUILD_PIN_BRANCH"
           npm run tauri:build
         env:
           TAURI_ENV_PLATFORM: windows
@@ -243,17 +242,18 @@ jobs:
       - name: Find and rename NSIS installer
         id: find_exe
         run: |
-          EXE=$(find apps/bootstrap-installer/src-tauri/target/release/bundle/nsis -name "*.exe" -type f 2>/dev/null | head -1)
-          if [ -z "$EXE" ]; then
-            echo "ERROR: No NSIS installer found"
-            find apps/bootstrap-installer/src-tauri/target/release/bundle -type f 2>/dev/null || true
+          $bundleDir = 'apps/bootstrap-installer/src-tauri/target/release/bundle/nsis'
+          $exe = Get-ChildItem -Path $bundleDir -Filter '*.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) {
+            Write-Error "ERROR: No NSIS installer found"
+            Get-ChildItem -Path 'apps/bootstrap-installer/src-tauri/target/release/bundle' -Recurse -ErrorAction SilentlyContinue
             exit 1
-          fi
-          RENAMED="apps/bootstrap-installer/src-tauri/target/release/bundle/nsis/Hermes-Setup-Bifrost.exe"
-          cp "$EXE" "$RENAMED"
-          echo "exe_path=$RENAMED" >> "$GITHUB_OUTPUT"
-          echo "Found: $EXE → $RENAMED"
-          ls -lh "$RENAMED"
+          }
+          $renamed = Join-Path $bundleDir 'Hermes-Setup-Bifrost.exe'
+          Copy-Item $exe.FullName $renamed -Force
+          "exe_path=$renamed" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Found: $($exe.FullName) → $renamed"
+          Get-Item $renamed | Format-List
 
       - name: Save EXE as artifact (always)
         continue-on-error: true
@@ -266,19 +266,15 @@ jobs:
       - name: Upload EXE to release
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          set -euo pipefail
-          TAG="${GITHUB_REF#refs/tags/}"
-          EXE="${{ steps.find_exe.outputs.exe_path }}"
+          $ErrorActionPreference = 'Stop'
+          $tag = $env:GITHUB_REF -replace '^refs/tags/', ''
+          $exe = '${{ steps.find_exe.outputs.exe_path }}'
 
           # Try to create the release; if it already exists (race with Mac job), upload instead.
-          gh release create "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "Hermes Bifrost Edition — $TAG" \
-            --notes "Hermes Setup — Bifrost Edition (Tauri installer)" \
-            "$EXE" || \
-          gh release upload "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --clobber \
-            "$EXE"
+          try {
+            gh release create $tag --repo $env:GITHUB_REPOSITORY --title "Hermes Bifrost Edition — $tag" --notes "Hermes Setup — Bifrost Edition (Tauri installer)" $exe
+          } catch {
+            gh release upload $tag --repo $env:GITHUB_REPOSITORY --clobber $exe
+          }
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
