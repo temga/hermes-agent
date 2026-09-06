@@ -185,18 +185,40 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref || github.ref }}
+      - name: Checkout (manual clone — no actions/* downloads)
+        shell: bash
+        run: |
+          set -euo pipefail
+          REF="${{ inputs.ref || github.ref }}"
+          REF_NAME="${REF#refs/heads/}"
+          REF_NAME="${REF_NAME#refs/tags/}"
+          echo "Cloning ref: $REF_NAME"
+          # Self-hosted runner workspace may have leftovers from previous runs.
+          find . -mindepth 1 -delete 2>/dev/null || true
+          git clone --depth 1 --branch "$REF_NAME" "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" .
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+      - name: Verify Rust toolchain
+        shell: bash
+        run: |
+          if ! command -v rustc &>/dev/null; then
+            echo "::error::Rust not found. Install via: winget install Rustlang.Rustup"
+            exit 1
+          fi
+          rustc --version
+          cargo --version
+          echo "Rust toolchain OK"
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Verify Node version
+        shell: bash
+        run: |
+          node --version
+          npm --version
+          NODE_MAJOR=$(node -e "console.log(process.versions.node.split('.')[0])")
+          if [ "$NODE_MAJOR" -lt 20 ]; then
+            echo "::error::Node 20+ required, got $(node --version)"
+            exit 1
+          fi
+          echo "✓ Node $NODE_MAJOR OK"
 
       - name: Install bootstrap-installer deps
         shell: bash
@@ -236,6 +258,14 @@ jobs:
           echo "exe_path=$RENAMED" >> "$GITHUB_OUTPUT"
           echo "Found: $EXE → $RENAMED"
           ls -lh "$RENAMED"
+
+      - name: Save EXE as artifact (always)
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hermes-Setup-Bifrost-exe
+          path: apps/bootstrap-installer/src-tauri/target/release/bundle/nsis/Hermes-Setup-Bifrost.exe
+          retention-days: 30
 
       - name: Upload EXE to release
         if: startsWith(github.ref, 'refs/tags/v')
