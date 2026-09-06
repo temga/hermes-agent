@@ -217,7 +217,7 @@ jobs:
             Write-Error "::error::Node 20+ required, got $(node --version)"
             exit 1
           }
-          Write-Host "✓ Node $nodeMajor OK"
+          Write-Host "OK: Node $nodeMajor OK"
 
       - name: Install bootstrap-installer deps
         run: |
