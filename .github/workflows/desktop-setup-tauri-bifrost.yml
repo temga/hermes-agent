@@ -180,6 +180,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-windows:
+    # Disabled: GitHub-hosted Windows runners require paid minutes, which are
+    # not available on a fork. Re-enable with `if: true` when a Windows
+    # self-hosted runner is registered or the account has paid minutes.
+    if: false
     runs-on: windows-latest
     timeout-minutes: 45
 
