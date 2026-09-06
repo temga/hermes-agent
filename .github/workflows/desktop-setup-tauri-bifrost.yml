@@ -10,6 +10,14 @@ on:
         description: 'Git ref to build (branch/tag/sha)'
         required: false
         default: ''
+      platform:
+        description: 'Which platform to build'
+        type: choice
+        options:
+          - both
+          - mac
+          - windows
+        default: both
 
 permissions:
   contents: write
@@ -20,6 +28,7 @@ concurrency:
 
 jobs:
   build-mac:
+    if: github.event_name != 'workflow_dispatch' || inputs.platform != 'windows'
     runs-on: [self-hosted, macOS]
     timeout-minutes: 30
 
@@ -181,6 +190,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-windows:
+    if: github.event_name != 'workflow_dispatch' || inputs.platform != 'mac'
     runs-on: [self-hosted, Windows]
     timeout-minutes: 45
     defaults:
