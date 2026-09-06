@@ -185,7 +185,7 @@ jobs:
     timeout-minutes: 45
     defaults:
       run:
-        shell: powershell
+        shell: powershell -ExecutionPolicy Bypass -Command
 
     steps:
       - name: Checkout (manual clone — no actions/* downloads)
