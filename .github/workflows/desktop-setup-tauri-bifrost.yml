@@ -86,9 +86,6 @@ jobs:
       - name: Build Tauri DMG (signed + notarized)
         run: |
           cd apps/bootstrap-installer
-          # Pin to the EXACT commit SHA — immutable URL avoids GitHub raw cache staleness.
-          export HERMES_BUILD_PIN_COMMIT="$GITHUB_SHA"
-          export HERMES_BUILD_PIN_BRANCH="bifrost-edition"
           echo "Pinning installer to commit $HERMES_BUILD_PIN_COMMIT on branch $HERMES_BUILD_PIN_BRANCH"
 
           # Tauri's notarization uses:
@@ -110,6 +107,8 @@ jobs:
           npm run tauri:build
         env:
           TAURI_ENV_PLATFORM: darwin
+          HERMES_BUILD_PIN_COMMIT: ${{ github.sha }}
+          HERMES_BUILD_PIN_BRANCH: bifrost-edition
           # Code signing — Apple Developer ID Application certificate (base64 .p12).
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -242,12 +241,12 @@ jobs:
       - name: Build Tauri NSIS installer
         run: |
           Set-Location apps/bootstrap-installer
-          $env:HERMES_BUILD_PIN_COMMIT = $env:GITHUB_SHA
-          $env:HERMES_BUILD_PIN_BRANCH = 'bifrost-edition'
           Write-Host "Pinning installer to commit $env:HERMES_BUILD_PIN_COMMIT on branch $env:HERMES_BUILD_PIN_BRANCH"
           npm run tauri:build
         env:
           TAURI_ENV_PLATFORM: windows
+          HERMES_BUILD_PIN_COMMIT: ${{ github.sha }}
+          HERMES_BUILD_PIN_BRANCH: bifrost-edition
 
       - name: Find and rename NSIS installer
         id: find_exe
