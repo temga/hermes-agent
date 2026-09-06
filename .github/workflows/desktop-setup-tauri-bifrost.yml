@@ -278,13 +278,32 @@ jobs:
         run: |
           $tag = $env:GITHUB_REF -replace '^refs/tags/', ''
           $exe = '${{ steps.find_exe.outputs.exe_path }}'
+          $repo = $env:GITHUB_REPOSITORY
+          $token = $env:GH_TOKEN
 
-          # Try to create the release; if it already exists (race with Mac job), upload instead.
-          # PowerShell try/catch doesn't catch non-zero exit codes from external commands,
-          # so we check $LASTEXITCODE explicitly.
-          gh release create $tag --repo $env:GITHUB_REPOSITORY --title "Hermes Bifrost Edition — $tag" --notes "Hermes Setup — Bifrost Edition (Tauri installer)" $exe 2>$null
-          if ($LASTEXITCODE -ne 0) {
-            gh release upload $tag --repo $env:GITHUB_REPOSITORY --clobber $exe
+          # If gh CLI is available, use it; otherwise fall back to REST API.
+          if (Get-Command gh -ErrorAction SilentlyContinue) {
+            gh release create $tag --repo $repo --title "Hermes Bifrost Edition - $tag" --notes "Hermes Setup - Bifrost Edition (Tauri installer)" $exe 2>$null
+            if ($LASTEXITCODE -ne 0) {
+              gh release upload $tag --repo $repo --clobber $exe
+            }
+          } else {
+            # REST API fallback: upload asset to existing or new release.
+            $headers = @{ Authorization = "Bearer $token"; Accept = "application/vnd.github+json" }
+            # Find existing release by tag.
+            $rel = $null
+            try {
+              $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/tags/$tag" -Headers $headers -ErrorAction Stop
+            } catch {}
+            if (-not $rel) {
+              $body = @{ tag_name = $tag; name = "Hermes Bifrost Edition - $tag"; body = "Hermes Setup - Bifrost Edition (Tauri installer)"; draft = $false } | ConvertTo-Json
+              $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases" -Method Post -Headers $headers -Body $body -ContentType "application/json"
+            }
+            # Upload asset.
+            $uploadUrl = $rel.upload_url -replace '\{\?name,label\}', "?name=Hermes-Setup-Bifrost.exe"
+            $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $exe).Path)
+            Invoke-RestMethod -Uri $uploadUrl -Method Post -Headers @{ Authorization = "Bearer $token"; Accept = "application/vnd.github+json" } -Body $bytes -ContentType "application/octet-stream"
+            Write-Host "Uploaded Hermes-Setup-Bifrost.exe to release $tag"
           }
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
