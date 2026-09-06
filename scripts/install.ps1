@@ -2307,8 +2307,14 @@ function Install-Repository {
 
                     if ($restoreNow) {
                         Write-Info "Restoring local changes..."
-                        $restoreOutput = @(git -c windows.appendAtomically=false stash apply $autostashRef 2>&1)
-                        $restoreExit = $LASTEXITCODE
+                        $prevStashEAP = $ErrorActionPreference
+                        $ErrorActionPreference = "Continue"
+                        try {
+                            $restoreOutput = @(git -c windows.appendAtomically=false stash apply $autostashRef 2>&1)
+                            $restoreExit = $LASTEXITCODE
+                        } finally {
+                            $ErrorActionPreference = $prevStashEAP
+                        }
                         $conflictedFiles = @(
                             git -c windows.appendAtomically=false diff --name-only --diff-filter=U 2>$null
                         ) | Where-Object { $_ -and $_.ToString().Trim() }
@@ -3360,7 +3366,7 @@ function Install-BifrostPlugins {
     # Clone (or update) the Bifrost plugin repo
     # NOTE: git writes "Cloning into..." to stderr. Under $ErrorActionPreference=Stop
     # (global in install.ps1), PowerShell turns stderr lines into terminating errors
-    # BEFORE $LASTEXITCODE is checked — so a successful clone is misread as failure.
+    # BEFORE $LASTEXITCODE is checked -- so a successful clone is misread as failure.
     # Invoke-NativeWithRelaxedErrorAction temporarily sets EAP=Continue, same as
     # Install-Repository does for its own git clone calls.
     if ((Test-Path (Join-Path $bfCloneDir ".git"))) {
@@ -3371,7 +3377,7 @@ function Install-BifrostPlugins {
         if (Test-Path $bfCloneDir) { Remove-Item -Recurse -Force $bfCloneDir }
         Invoke-NativeWithRelaxedErrorAction { & git clone --depth 1 $bfRepoUrl $bfCloneDir 2>&1 | Out-Null }
         if ($LASTEXITCODE -ne 0) {
-            Write-Err "Failed to clone Bifrost plugins — they will not be available"
+            Write-Err "Failed to clone Bifrost plugins -- they will not be available"
             Write-Info "You can install them manually later from $bfRepoUrl"
             return  # non-fatal
         }
@@ -3427,7 +3433,7 @@ function Install-BifrostPlugins {
         $enableNames = $bfPlugins -join " "
 
         # Configure all service providers to use Bifrost via hermes_cli.config
-        # (YAML-aware — no regex, no duplicate keys). One sk-bf-* key powers:
+        # (YAML-aware -- no regex, no duplicate keys). One sk-bf-* key powers:
         # LLM, image gen, web search, STT, TTS.
         $configScript = @"
 import sys, re
@@ -3461,7 +3467,7 @@ print(f"Enabled Bifrost plugins: {', '.join(plugins_str)}")
 cfg = load_config()
 
 # model: provider + default + base_url
-# base_url MUST point at the Bifrost gateway — the template's
+# base_url MUST point at the Bifrost gateway -- the template's
 # openrouter.ai URL is stale and produces 403 at runtime because
 # _keyresolver.py only resolves the key when the URL host matches
 # router.rove-ai.ru.
@@ -3479,7 +3485,7 @@ web = cfg.setdefault('web', {})
 web['search_backend'] = 'bifrost'
 web['extract_backend'] = 'bifrost'
 
-# stt: provider + bifrost config (language: ru is critical — global default is "en")
+# stt: provider + bifrost config (language: ru is critical -- global default is "en")
 stt = cfg.setdefault('stt', {})
 stt['provider'] = 'bifrost'
 stt_bf = stt.setdefault('bifrost', {})
@@ -3705,7 +3711,9 @@ function Install-NodeDeps {
         }
         while (-not $proc.HasExited) {
             if ([DateTime]::UtcNow -gt $deadline) {
-                & taskkill /T /F /PID $proc.Id 2>&1 | Out-Null
+                $prevKillEAP = $ErrorActionPreference
+                $ErrorActionPreference = "Continue"
+                try { & taskkill /T /F /PID $proc.Id 2>&1 | Out-Null } finally { $ErrorActionPreference = $prevKillEAP }
                 return 124
             }
             Start-Sleep -Milliseconds 750
