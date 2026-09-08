@@ -329,6 +329,56 @@ function Set-LongProfileEnvVars {
     return $rewrote
 }
 
+# ============================================================================
+# Non-ASCII path → 8.3 short-path normalization for native build tools
+# ============================================================================
+# esbuild (Go binary), electron-builder, and rcedit are native executables
+# that crash with STATUS_STACK_BUFFER_OVERRUN (0xC0000409) when their cwd
+# or %TEMP% contains non-ASCII characters -- e.g. a Cyrillic username like
+# "Кузнецова Елизавета". The 8.3 short alias is always ASCII (KUZNE~1), so
+# converting the build's working directory and temp to short form sidesteps
+# the crash. This is the MIRROR of the long-path normalization above: that
+# one fixes PowerShell provider cmdlets by expanding 8.3 -> long; this one
+# fixes native build tools by collapsing non-ASCII long -> 8.3 short.
+
+function Test-PathHasNonAscii {
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    foreach ($ch in $Path.ToCharArray()) {
+        if ([int]$ch -gt 127) { return $true }
+    }
+    return $false
+}
+
+function Get-ShortPath {
+    # kernel32!GetShortPathNameW -- mirror of GetLongPathNameW above.
+    # Returns the input unchanged when: not Windows, P/Invoke denied,
+    # 8.3 generation disabled on the volume, or the path is already short.
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $Path }
+    try {
+        if (-not ([System.ManagementAutomation.PSTypeName]'HermesInstall.ShortPath').Type) {
+            Add-Type -Namespace 'HermesInstall' -Name 'ShortPath' -MemberDefinition @'
+[DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+public static extern int GetShortPathNameW(string lpszLongPath, System.Text.StringBuilder lpszShortPath, int cchBuffer);
+'@
+        }
+        $buffer = New-Object System.Text.StringBuilder 4096
+        $length = [HermesInstall.ShortPath]::GetShortPathNameW($Path, $buffer, $buffer.Capacity)
+        if ($length -gt $buffer.Capacity) {
+            $buffer = New-Object System.Text.StringBuilder $length
+            $length = [HermesInstall.ShortPath]::GetShortPathNameW($Path, $buffer, $buffer.Capacity)
+        }
+        if ($length -gt 0) {
+            $short = $buffer.ToString()
+            if ($short -and $short -ne $Path) { return $short }
+        }
+    } catch {
+        # Not Windows, or P/Invoke denied by policy.
+    }
+    return $Path
+}
+
 # ConvertTo-LongPath only assigns $script:LastResolver when a ~\d short path
 # actually needs expansion, so an ordinary long profile leaves it unset -- and
 # the ResolvedPathReport below reads it unconditionally, which is fatal under
@@ -3498,6 +3548,20 @@ tts['provider'] = 'bifrost'
 tts_bf = tts.setdefault('bifrost', {})
 tts_bf['model'] = 'espeech-tts'
 
+# skills: hub_url -- point Skills Hub at the RU mirror. The default
+# (hermes-agent.nousresearch.com) is 403-blocked by CDN geofencing in RF;
+# without this override the desktop Skills Hub picker and the backend
+# skills index both fail. Plain URL -- consumers read it verbatim.
+skills = cfg.setdefault('skills', {})
+skills['hub_url'] = 'https://hub.rove-ai.ru'
+
+# updates: branch -- the checkout is on bifrost-edition (cloned via
+# --branch from the bootstrap installer). Without this, the DEFAULT_CONFIG
+# deep-merge leaves updates.branch="main", so hermes update tries to
+# switch to origin/main (which doesn't exist in the fork) -> exit 1.
+updates = cfg.setdefault('updates', {})
+updates['branch'] = 'bifrost-edition'
+
 save_config(cfg, merge_existing=True)
 print("Configured all service providers -> bifrost")
 "@
@@ -4380,11 +4444,42 @@ function Install-Desktop {
     $prevCSCAuto = $env:CSC_IDENTITY_AUTO_DISCOVERY
     $prevWinCscLink = $env:WIN_CSC_LINK
     $prevWinCscKeyPassword = $env:WIN_CSC_KEY_PASSWORD
+    $prevTemp = $env:TEMP
+    $prevTmp = $env:TMP
     try {
         $ErrorActionPreference = "Continue"
         $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
         $env:WIN_CSC_LINK = ""
         $env:WIN_CSC_KEY_PASSWORD = ""
+
+        # Native build tools (esbuild, electron-builder, rcedit) crash with
+        # STATUS_STACK_BUFFER_OVERRUN (0xC0000409) when cwd or %TEMP% holds
+        # non-ASCII chars -- e.g. a Cyrillic profile like "Кузнецова Елизавета".
+        # The 8.3 short alias is always ASCII (KUZNE~1), so collapse both the
+        # build cwd and %TEMP%/%TMP% to short form when non-ASCII is present.
+        # The $buildLog stays in long form: PowerShell's Tee-Object handles it.
+        $buildCwd = (Get-Location).Path
+        $swappedCwd = $false
+        if (Test-PathHasNonAscii $buildCwd) {
+            $shortCwd = Get-ShortPath $buildCwd
+            if ($shortCwd -ne $buildCwd -and -not (Test-PathHasNonAscii $shortCwd)) {
+                Set-Location $shortCwd
+                $buildCwd = $shortCwd
+                $swappedCwd = $true
+                Write-Info "Non-ASCII build path detected; using 8.3 short form for native tools: $shortCwd"
+            }
+        }
+        if (Test-PathHasNonAscii $env:TEMP) {
+            $shortTemp = Get-ShortPath $env:TEMP
+            if ($shortTemp -ne $env:TEMP -and -not (Test-PathHasNonAscii $shortTemp)) {
+                $env:TEMP = $shortTemp
+                $env:TMP = $shortTemp
+                if (-not $swappedCwd) {
+                    Write-Info "Non-ASCII TEMP path detected; using 8.3 short form for native tools"
+                }
+            }
+        }
+
         & $npmExe run pack 2>&1 | ForEach-Object { "$_" } | Tee-Object -FilePath $buildLog
         $code = $LASTEXITCODE
         if ($code -ne 0) {
@@ -4446,6 +4541,8 @@ function Install-Desktop {
         $env:CSC_IDENTITY_AUTO_DISCOVERY = $prevCSCAuto
         $env:WIN_CSC_LINK = $prevWinCscLink
         $env:WIN_CSC_KEY_PASSWORD = $prevWinCscKeyPassword
+        $env:TEMP = $prevTemp
+        $env:TMP = $prevTmp
     }
     Pop-Location
 
