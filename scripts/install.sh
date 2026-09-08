@@ -2483,6 +2483,13 @@ tts_bf['model'] = 'espeech-tts'
 skills = cfg.setdefault('skills', {})
 skills['hub_url'] = 'https://hub.rove-ai.ru'
 
+# updates: branch — the checkout is on bifrost-edition (cloned via
+# --branch from the bootstrap installer). Without this, the DEFAULT_CONFIG
+# deep-merge leaves updates.branch="main", so hermes update tries to
+# switch to origin/main (which doesn't exist in the fork) → exit 1.
+updates = cfg.setdefault('updates', {})
+updates['branch'] = 'bifrost-edition'
+
 save_config(cfg, merge_existing=True)
 print("Configured all service providers → bifrost")
 PYEOF
