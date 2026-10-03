@@ -1,0 +1,41 @@
+name: Mirror main to bifrost-edition
+
+# The Bifrost build lives on main. Tauri installers released before that move baked
+# BUILD_PIN_BRANCH=bifrost-edition and pass `--branch bifrost-edition` to `hermes update`,
+# and their installs pin updates.branch to it, so the branch must keep following main.
+# Fast-forward only: a diverged bifrost-edition fails the job instead of being overwritten.
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bifrost-edition-mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 5
+    steps:
+      - name: Fast-forward bifrost-edition to main
+        run: |
+          set -euo pipefail
+          status=$(curl -sS -o response.json -w '%{http_code}' -X PATCH \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/git/refs/heads/bifrost-edition" \
+            -d "{\"sha\":\"$GITHUB_SHA\",\"force\":false}")
+          cat response.json
+          rm -f response.json
+          if [ "$status" != "200" ]; then
+            echo "::error::bifrost-edition could not be fast-forwarded to $GITHUB_SHA (HTTP $status)"
+            exit 1
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
