@@ -104,11 +104,10 @@ jobs:
           export APPLE_API_KEY_PATH="$API_KEY_FILE"
           export APPLE_API_KEY="$APPLE_API_KEY_ID"
 
-          # Under the launchd runner service a step's stdin is closed, and actool (Assets.car from
-          # icon.icon) then fails with "Bad file descriptor"; give the build a real stdin.
-          # A broken ibtoold left by an earlier run is reused by actool, so drop it first.
-          pkill -f 'Developer/usr/bin/ibtoold' || true
-          npm run tauri:build </dev/null
+          # Bundle without upstream's Icon Composer icon (icons/icon.icon): compiling it needs actool,
+          # which fails under the launchd runner service ("actool did not generate Assets.car").
+          # icon.icns still provides the macOS app icon.
+          npm run tauri:build -- --config '{"bundle":{"icon":["icons/32x32.png","icons/128x128.png","icons/128x128@2x.png","icons/icon.icns","icons/icon.ico"]}}'
         env:
           TAURI_ENV_PLATFORM: darwin
           HERMES_BUILD_PIN_COMMIT: ${{ github.sha }}
