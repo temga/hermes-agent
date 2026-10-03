@@ -42,7 +42,14 @@ jobs:
           echo "Cloning ref: $REF_NAME"
           # Self-hosted runner workspace may have leftovers from previous runs.
           find . -mindepth 1 -delete 2>/dev/null || true
-          git clone --depth 1 --branch "$REF_NAME" "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" .
+          # The link to GitHub drops connections now and then ("Connection reset by peer"); retry.
+          for attempt in 1 2 3; do
+            git clone --depth 1 --branch "$REF_NAME" "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" . && break
+            [ "$attempt" = 3 ] && exit 1
+            echo "clone attempt $attempt failed; retrying in 15s"
+            find . -mindepth 1 -delete 2>/dev/null || true
+            sleep 15
+          done
 
       - name: Install Rust toolchain (if missing)
         run: |
