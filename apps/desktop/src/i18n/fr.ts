@@ -4918,6 +4918,8 @@ export const frOverrides = {
     signInFailed: 'Échec de la connexion. Réessayez.',
     signInExpired:
       "La connexion a expiré dans l'attente de l'autorisation. Cela signifie généralement que la page de connexion s'est figée dans l'onglet ouvert (problème côté serveur) — terminez la connexion dans cet onglet, puis réessayez. Si le problème persiste, utilisez plutôt une clé API ou la solution de secours en ligne de commande.",
+    defaultModelNotSaved: (provider, detail) =>
+      `Votre clé ${provider} est enregistrée, mais Hermes n'a pas pu définir de modèle par défaut. ${detail}`.trim(),
     signInDidNotFinish: provider =>
       `La connexion avec ${provider} ne s'est pas terminée. Vérifiez votre connexion Internet et réessayez, ou choisissez un autre fournisseur.`,
     tryAgain: 'Réessayer',

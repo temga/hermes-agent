@@ -3464,6 +3464,8 @@ export const ru = defineLocale({
     haveApiKey: 'У меня есть API-ключ',
     chooseLater: 'Выберу провайдера позже',
     recommended: 'Рекомендуется',
+    defaultModelNotSaved: (provider: string, detail: string) =>
+      `Ключ ${provider} сохранён, но Hermes не смог выбрать для него модель по умолчанию. ${detail}`.trim(),
     connected: 'Подключено',
     featuredPitch: 'Одна подписка, 300+ передовых моделей — рекомендуемый способ запускать Hermes',
     fireworksPitch: 'Прямой API моделей — передовые модели на хостинге Fireworks',

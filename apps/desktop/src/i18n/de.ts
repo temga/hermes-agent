@@ -4904,6 +4904,8 @@ export const deOverrides = {
     signInFailed: 'Anmeldung fehlgeschlagen. Versuchen Sie es erneut.',
     signInExpired:
       'Die Anmeldung ist beim Warten auf die Autorisierung abgelaufen. Meist bedeutet das, dass die Anmeldeseite im geöffneten Tab hängen geblieben ist (serverseitiges Problem) – schließen Sie die Anmeldung dort ab und versuchen Sie es dann erneut. Wenn es weiterhin fehlschlägt, verwenden Sie stattdessen einen API-Key oder die CLI als Alternative.',
+    defaultModelNotSaved: (provider, detail) =>
+      `Ihr ${provider}-Schlüssel ist gespeichert, aber Hermes konnte kein Standardmodell dafür festlegen. ${detail}`.trim(),
     signInDidNotFinish: provider =>
       `Die Anmeldung bei ${provider} wurde nicht abgeschlossen. Prüfen Sie Ihre Internetverbindung und versuchen Sie es erneut, oder wählen Sie einen anderen Anbieter.`,
     tryAgain: 'Erneut versuchen',

@@ -1074,6 +1074,46 @@ describe('saveOnboardingApiKey (Bifrost validation)', () => {
     expect(result.ok).toBe(true)
     expect(calls).toContain('/api/env')
   })
+
+  it('reports a refused default model in the key form instead of stalling silently', async () => {
+    const model = 'vendor/unreachable'
+    const detail = `Model \`${model}\` was not found in this provider's model listing.`
+
+    installApiMock(async ({ path }: { path: string }) => {
+      if (path === '/api/providers/validate') {
+        return { ok: true, reachable: true, message: '', models: [] }
+      }
+
+      if (path === '/api/env') {
+        return { ok: true }
+      }
+
+      if (path.startsWith('/api/model/options')) {
+        return { providers: [{ name: 'Bifrost Gateway', slug: 'bifrost', models: [model] }] }
+      }
+
+      if (path.startsWith('/api/model/recommended-default?')) {
+        return { provider: 'bifrost', model, free_tier: null }
+      }
+
+      if (path === '/api/model/set') {
+        throw new Error(
+          `Error invoking remote method 'hermes:api': Error: 400: ${JSON.stringify({ detail })}`
+        )
+      }
+
+      throw new Error(`unexpected api path: ${path}`)
+    })
+
+    const result = await saveOnboardingApiKey('BIFROST_API_KEY', 'sk-bf-real', 'Bifrost Gateway', {
+      requestGateway: bifrostReadyGateway()
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('Bifrost Gateway')
+    expect(result.message).toContain(detail)
+    expect($desktopOnboarding.get().flow.status).not.toBe('confirming_model')
+  })
 })
 
 describe('device-code poll expiry', () => {

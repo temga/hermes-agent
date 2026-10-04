@@ -172,6 +172,32 @@ def _nous_recommended_default() -> dict:
     return recommended_nous_default_model()
 
 
+def _current_model_for(context, slug: str) -> str:
+    """The configured model when *slug* is the configured provider, else ""."""
+    return context.current_model if context.current_provider.strip().lower() == slug else ""
+
+
+def _reachable_models(slug: str, models: list[str]) -> list[str]:
+    """*models* (curated order) narrowed to what the credential's own ``/models`` listing carries.
+
+    The same listing ``validate_requested_model`` rejects against, so the recommendation is a model
+    ``/api/model/set`` accepts. (The picker catalog merges the curated list into it and cannot
+    tell.) Fetched live: this endpoint runs once per sign-in, never on a hot path. No listing
+    (offline, no models endpoint) keeps *models*; a listing sharing nothing with them does too —
+    its rows may be embeddings or speech models."""
+    from hermes_cli.models import fetch_api_models
+    from hermes_cli.runtime_provider import resolve_runtime_provider
+
+    try:
+        runtime = resolve_runtime_provider(requested=slug)
+        listed = fetch_api_models(runtime.get("api_key"), runtime.get("base_url"))
+    except Exception:
+        _log.debug("live listing for %s unavailable", slug, exc_info=True)
+        return models
+    reachable = set(listed or ())
+    return [m for m in models if m in reachable] or models
+
+
 @router.get("/api/model/recommended-default")
 def get_recommended_default_model(provider: str = "", profile: Optional[str] = None):
     """Recommended default model for a freshly-authenticated provider, mirroring
@@ -180,6 +206,10 @@ def get_recommended_default_model(provider: str = "", profile: Optional[str] = N
     silent default when its curated list carries it, else the first curated model —
     aggregator lists lead with the priciest Anthropic flagship, which must never be
     the model a user lands on without explicitly picking it.
+    Re-authenticating the provider already in use keeps the configured model while
+    the provider still offers it. Other providers narrow their list to the models the
+    credential can actually reach (live listing) first: a curated model the key cannot
+    use would be rejected by ``/api/model/set`` and strand onboarding.
     Response: {"provider", "model", "free_tier": bool | None} — free_tier only for
     Nous; ``model`` may be empty (caller degrades gracefully)."""
     slug = (provider or "").strip().lower()
@@ -188,6 +218,12 @@ def get_recommended_default_model(provider: str = "", profile: Optional[str] = N
         try:
             # The tier, Portal URL and recommendation caches are all per profile home.
             with _config_profile_scope(profile):
+                from hermes_cli.inventory import load_picker_context
+                from hermes_cli.models import get_curated_nous_model_ids
+
+                current = _current_model_for(load_picker_context(), slug)
+                if current and current in get_curated_nous_model_ids():
+                    return {"provider": slug, "model": current, "free_tier": None}
                 return _nous_recommended_default()
         except HTTPException:
             raise  # an unknown ?profile= is the scope's 404, not an empty recommendation
@@ -202,11 +238,14 @@ def get_recommended_default_model(provider: str = "", profile: Optional[str] = N
         # build_models_payload -> list_authenticated_providers -> _save_discovered_models_to_config:
         # this GET lazily PERSISTS discovered custom-provider models, so it needs the scope too.
         with _config_profile_scope(profile):
-            payload = build_models_payload(load_picker_context())
-        for row in payload.get("providers", []):
-            if str(row.get("slug", "")).lower() == slug:
-                models = [str(m) for m in (row.get("models") or [])]
-                return {"provider": slug, "model": pick_silent_default_model(models, provider=slug), "free_tier": None}
+            context = load_picker_context()
+            payload = build_models_payload(context)
+            for row in payload.get("providers", []):
+                if str(row.get("slug", "")).lower() == slug:
+                    models = _reachable_models(slug, [str(m) for m in (row.get("models") or [])])
+                    current = _current_model_for(context, slug)
+                    model = current if current in models else pick_silent_default_model(models, provider=slug)
+                    return {"provider": slug, "model": model, "free_tier": None}
         return {"provider": slug, "model": "", "free_tier": None}
     except HTTPException:
         raise  # an unknown ?profile= is the scope's 404, not an empty recommendation

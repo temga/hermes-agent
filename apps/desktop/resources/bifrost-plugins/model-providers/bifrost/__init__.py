@@ -39,24 +39,26 @@ if not os.environ.get("BIFROST_BASE_URL"):
 # Default gateway URL (local Bifrost instance)
 _DEFAULT_BASE_URL = os.environ.get("BIFROST_BASE_URL", "https://router.rove-ai.ru/v1")
 
-# Curated fallback model list — the full catalog is dynamic (24+ models
-# across 4 upstream providers). Users can set any model id in config.yaml
-# and it will be passed through to the gateway.
+# Curated model list, in preference order — the full catalog is dynamic (24+
+# models across 4 upstream providers) and each sk-bf-* key reaches only part of
+# it. The silent default (onboarding, /api/model/recommended-default) is the
+# first entry the key's live /v1/models listing carries, so a key without
+# turbocloud lands on tropass, then neuraldeep. Users can set any model id in
+# config.yaml and it will be passed through to the gateway.
 _FALLBACK_MODELS = (
-    # turbocloud — default chat model for the Bifrost edition
     "turbocloud/GLM-5.2",
+    "tropass/GLM-5.2",
+    "neuraldeep/qwen3.8-27b",
     # neuraldeep — reasoning + noreason variants
     "neuraldeep/gpt-oss-120b",
     "neuraldeep/qwen3.6-35b-a3b",
     "neuraldeep/qwen3.6-35b-a3b-noreason",
-    "neuraldeep/qwen3.8-27b",
     "neuraldeep/qwen3.8-27b-noreason",
     "neuraldeep/kimi-k2.6",
     "neuraldeep/gemma-4-31b",
     "neuraldeep/gemma-4-31b-noreason",
     "neuraldeep/frida",
     # tropass
-    "tropass/GLM-5.2",
     "tropass/Qwen3.5-397B-A17B-FP8",
 )
 

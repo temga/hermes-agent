@@ -3717,6 +3717,7 @@ export interface Translations {
     signInFailed: string
     signInExpired: string
     signInDidNotFinish: (provider: string) => string
+    defaultModelNotSaved: (provider: string, detail: string) => string
     tryAgain: string
     useApiKeyInstead: string
     errorDetails: string

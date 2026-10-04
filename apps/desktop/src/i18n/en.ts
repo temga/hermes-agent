@@ -4467,6 +4467,8 @@ export const en: Translations = {
     signInFailed: 'Sign-in failed. Try again.',
     signInExpired:
       'The sign-in page timed out before you finished. Try again and complete the browser step within a few minutes, or use an API key instead.',
+    defaultModelNotSaved: (provider, detail) =>
+      `Your ${provider} key is saved, but Hermes could not set a default model for it. ${detail}`.trim(),
     signInDidNotFinish: provider =>
       `Sign-in with ${provider} did not finish. Check your internet connection and try again, or pick a different provider.`,
     tryAgain: 'Try again',

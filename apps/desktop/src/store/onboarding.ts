@@ -19,7 +19,7 @@ import { evaluateRuntimeReadiness, type RuntimeReadinessResult } from '@/lib/run
 import { ackFreeTierNotice, freeTierReadyPending, refreshFreeTierStatus, setFreeTierRoute } from '@/store/free-tier'
 import { $gatewayBootGeneration } from '@/store/live-sync'
 import { setMainModelAssignment } from '@/store/model-assignment'
-import { dismissNotification, notify, notifyError } from '@/store/notifications'
+import { dismissNotification, notify, notifyError, readableError } from '@/store/notifications'
 import { guidedOnboardingActive } from '@/store/onboarding-gate'
 import { captureOnboardingScope, type OnboardingScope } from '@/store/onboarding-scope'
 import type { OAuthProvider, OAuthStartResponse } from '@/types/hermes'
@@ -374,43 +374,34 @@ async function fetchProviderDefaultModel(
     return null
   }
 
-  // Re-login to the provider already in use (expired OAuth grant): keep the
-  // model the user was on. Swapping in the provider's recommended default
-  // would silently change what they're chatting with.
-  const currentModel = String(options?.model ?? '')
-
-  if (
-    currentModel &&
-    String(options?.provider ?? '').toLowerCase() === String(matched.slug).toLowerCase() &&
-    models.map(String).includes(currentModel)
-  ) {
-    return { providerSlug: String(matched.slug), defaultModel: currentModel }
-  }
-
-  // Prefer the backend's recommended default — it mirrors the curation
-  // `hermes model` does (for Nous it honors the user's free/paid tier, so a
-  // free user gets a free model rather than a paid default like opus). Fall
-  // back to the first curated model if the endpoint can't resolve one.
-  let defaultModel = String(models[0])
-
+  // The backend's recommended default decides first: it keeps the configured
+  // model on a re-login to the provider in use, honors the Nous free/paid tier,
+  // and only offers models the credential can reach — the curated list here
+  // can name models this key cannot use, which /api/model/set then rejects.
   try {
     const recommended = await getRecommendedDefaultModel(String(matched.slug), profile)
 
-    if (recommended.model && models.map(String).includes(recommended.model)) {
-      defaultModel = recommended.model
-    } else if (recommended.model) {
-      // Recommended model isn't in the curated options list (e.g. a Portal
-      // free-recommendation the picker list didn't include); trust it anyway.
-      defaultModel = recommended.model
+    if (recommended.model) {
+      return { providerSlug: String(matched.slug), defaultModel: recommended.model }
     }
   } catch {
-    // Endpoint unavailable — keep models[0]. Non-fatal: the confirm card still
-    // shows and the user can change it.
+    // Endpoint unavailable — fall back to the local choice below. Non-fatal:
+    // the confirm card still shows and the user can change it.
   }
+
+  // Re-login to the provider already in use (expired OAuth grant): keep the
+  // model the user was on. Swapping in the first curated model would silently
+  // change what they're chatting with.
+  const currentModel = String(options?.model ?? '')
+
+  const keepCurrent =
+    currentModel &&
+    String(options?.provider ?? '').toLowerCase() === String(matched.slug).toLowerCase() &&
+    models.map(String).includes(currentModel)
 
   return {
     providerSlug: String(matched.slug),
-    defaultModel
+    defaultModel: keepCurrent ? currentModel : String(models[0])
   }
 }
 
@@ -509,6 +500,14 @@ async function completeWithModelConfirm(
     label: providerLabel,
     saving: false
   })
+}
+
+// The key is saved but the default model was refused (e.g. a curated model this
+// key cannot reach): say so in the key form, with the backend's reason.
+function modelSaveFailure(provider: string, reason: null | string) {
+  const detail = reason ? readableError(reason, '').message : ''
+
+  return translateNow('onboarding.defaultModelNotSaved', provider, detail)
 }
 
 function providerResolutionFailure(reason: null | string) {
@@ -1181,8 +1180,24 @@ export async function saveOnboardingApiKey(
     // fetchProviderDefaultModel falls back to the first authenticated
     // provider returned by /api/model/options if none match.
     const slugCandidates = [envKey.replace(/_API_KEY$/, '').toLowerCase(), label.toLowerCase()]
-    // ignoreRuntimeGate=true: never block onboarding on the runtime check.
-    await completeWithModelConfirm(ctx, label, slugCandidates, () => undefined, true)
+    // ignoreRuntimeGate=true: never block onboarding on the runtime check. With
+    // the gate off, onFail only reports a default model the backend refused to
+    // save — the flow stopped there, so the key form must say why.
+    let failure: null | string = null
+
+    await completeWithModelConfirm(
+      ctx,
+      label,
+      slugCandidates,
+      reason => {
+        failure = reason
+      },
+      true
+    )
+
+    if (failure !== null) {
+      return { ok: false, message: modelSaveFailure(label, failure) }
+    }
 
     return { ok: true }
   } catch (error) {

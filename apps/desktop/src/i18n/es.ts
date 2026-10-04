@@ -4895,6 +4895,8 @@ export const esOverrides = {
     signInFailed: 'No se pudo iniciar sesión. Inténtalo de nuevo.',
     signInExpired:
       'La página de inicio de sesión caducó antes de que terminaras. Vuelve a intentarlo y completa el paso del navegador en unos minutos, o usa una clave API.',
+    defaultModelNotSaved: (provider: string, detail: string) =>
+      `Tu clave de ${provider} está guardada, pero Hermes no pudo elegir un modelo predeterminado. ${detail}`.trim(),
     signInDidNotFinish: (provider: string) =>
       `No se completó el inicio de sesión con ${provider}. Comprueba tu conexión a internet y vuelve a intentarlo, o elige otro proveedor.`,
     tryAgain: 'Reintentar',
