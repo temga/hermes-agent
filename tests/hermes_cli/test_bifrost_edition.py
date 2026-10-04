@@ -59,3 +59,25 @@ def test_key_resolver_copies_match():
     bundled copies must not drift apart."""
     copies = {plugin: (_BUNDLED / plugin / "_keyresolver.py").read_text(encoding="utf-8") for plugin in BIFROST_PLUGINS}
     assert len(set(copies.values())) == 1, sorted(copies)
+
+
+def test_install_turns_on_the_guide_without_the_nous_free_tier(tmp_path, monkeypatch):
+    """The desktop reads ``desktop.guided_onboarding`` with a narrow line parser before its first
+    window (``readDesktopLaunchConfig``): a top-level ``desktop:`` with two-space keys. The guide
+    must then run on the Bifrost key, never mint the geofenced Nous free tier."""
+    import re
+
+    from hermes_cli import bifrost_edition
+    from hermes_cli.anon_auth import guest_enabled
+
+    home = tmp_path / ".hermes"
+    home.mkdir()
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.setenv("HERMES_GUEST_ONBOARDING", "1")
+
+    assert bifrost_edition.main() == 0
+
+    text = (home / "config.yaml").read_text(encoding="utf-8")
+    block = re.search(r"^desktop:\n((?:[ \t].*\n|\n)*)", text, re.MULTILINE)
+    assert block and re.search(r"^  guided_onboarding: true\s*$", block.group(1), re.MULTILINE)
+    assert guest_enabled() is False

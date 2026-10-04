@@ -3,6 +3,7 @@
 // that never go through the `hermes desktop` launcher.
 import { describe, expect, it, vi } from 'vitest'
 
+import { guestOnboardingEnabled } from './guest-onboarding'
 import { planLaunchSwitches, readDesktopLaunchConfig } from './renderer-heap-flags'
 
 describe('renderer heap flags', () => {
@@ -99,5 +100,15 @@ describe('renderer heap flags', () => {
     expect(read('"C:\\\\Git\\\\usr\\\\bin\\\\ssh.exe"')).toBe('C:\\Git\\usr\\bin\\ssh.exe')
     expect(read('""')).toBeUndefined()
     expect(readDesktopLaunchConfig('terminal:\n  ssh_path: C:\\x.exe').sshPath).toBeUndefined()
+  })
+
+  it('desktop.guided_onboarding turns the first-run guide on without the env var or flag', () => {
+    const guide = (yaml: string) =>
+      guestOnboardingEnabled([], {}, readDesktopLaunchConfig(yaml).guidedOnboarding === true)
+
+    expect(guide('desktop:\n  font_family: ""\n  guided_onboarding: true\n')).toBe(true)
+    expect(guide('desktop:\n  guided_onboarding: false\n')).toBe(false)
+    expect(guide('nous:\n  guided_onboarding: true\n')).toBe(false)
+    expect(guestOnboardingEnabled([], { HERMES_GUEST_ONBOARDING: '1' }, false)).toBe(true)
   })
 })

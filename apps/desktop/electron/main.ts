@@ -1275,6 +1275,9 @@ const HERMES_HOME: string = resolveDesktopHermesHome({
 // `desktop.ssh_path` (#103288) rides the same pre-window read: an explicit
 // Windows ssh client for when the in-box OpenSSH is missing or broken.
 let desktopSshPathOverride = ''
+// `desktop.guided_onboarding` lets an edition turn the first-run guide on from
+// config.yaml; the env var and flag stay as explicit launch overrides.
+let desktopGuidedOnboarding = false
 
 {
   let desktopLaunchYaml: string = ''
@@ -1287,6 +1290,7 @@ let desktopSshPathOverride = ''
 
   const desktopLaunchConfig = readDesktopLaunchConfig(desktopLaunchYaml)
   desktopSshPathOverride = desktopLaunchConfig.sshPath || ''
+  desktopGuidedOnboarding = desktopLaunchConfig.guidedOnboarding === true
 
   // `desktop.renderer_accessibility: false` must reach packaged launches too,
   // not only the `hermes desktop` launcher's env bridge (#118271).
@@ -1396,7 +1400,7 @@ const BOOT_FAKE_ERROR = process.env.HERMES_DESKTOP_BOOT_FAKE_ERROR || ''
 // caller instead of letting the process exit. Force quits set this.
 const SKIP_QUIT_CONFIRM = process.env.HERMES_DESKTOP_SKIP_QUIT_CONFIRM === '1'
 // One launch decision must reach both the renderer and every backend spawn.
-const GUEST_ONBOARDING: boolean = guestOnboardingEnabled()
+const GUEST_ONBOARDING: boolean = guestOnboardingEnabled(process.argv, process.env, desktopGuidedOnboarding)
 
 const BOOT_FAKE_STEP_MS = (() => {
   const raw = Number.parseInt(String(process.env.HERMES_DESKTOP_BOOT_FAKE_STEP_MS || ''), 10)

@@ -86,6 +86,10 @@ def configure(cfg: dict) -> dict:
     tts.setdefault("bifrost", {})["model"] = "espeech-tts"
     # The default Skills Hub (hermes-agent.nousresearch.com) is 403-blocked by CDN geofencing in RF.
     cfg.setdefault("skills", {})["hub_url"] = "https://hub.rove-ai.ru"
+    # The first-run guide runs on the user's Bifrost key once onboarding saves it. The Nous free
+    # tier it would otherwise mint is geofenced in RF and bypasses Bifrost.
+    cfg.setdefault("desktop", {})["guided_onboarding"] = True
+    cfg.setdefault("nous", {})["guest"] = False
     updates = cfg.get("updates")
     if isinstance(updates, dict) and updates.get("branch") == LEGACY_BIFROST_BRANCH:
         del updates["branch"]

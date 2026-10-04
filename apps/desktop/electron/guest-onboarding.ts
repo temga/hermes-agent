@@ -1,11 +1,13 @@
 export const GUEST_ONBOARDING_ENV = 'HERMES_GUEST_ONBOARDING'
 export const GUEST_ONBOARDING_FLAG = '--guest-onboarding'
 
+/** `configured` is `desktop.guided_onboarding` from the launch profile's config.yaml. */
 export function guestOnboardingEnabled(
   argv: readonly string[] = process.argv,
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  configured = false
 ): boolean {
-  return env[GUEST_ONBOARDING_ENV] === '1' || argv.includes(GUEST_ONBOARDING_FLAG)
+  return env[GUEST_ONBOARDING_ENV] === '1' || argv.includes(GUEST_ONBOARDING_FLAG) || configured
 }
 
 export function desktopBackendSpawnEnv(base: NodeJS.ProcessEnv, guestOnboarding: boolean): NodeJS.ProcessEnv {

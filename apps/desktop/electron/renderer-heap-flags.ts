@@ -15,7 +15,14 @@ export interface DesktopLaunchConfig {
   rendererAccessibility?: boolean
   /** `desktop.ssh_path`: explicit Windows ssh client (#103288); unset when absent. */
   sshPath?: string
+  /** `desktop.guided_onboarding`: the first-run guide chat; unset when absent or unreadable. */
+  guidedOnboarding?: boolean
 }
+
+const BOOLEAN_KEYS = {
+  guided_onboarding: 'guidedOnboarding',
+  renderer_accessibility: 'rendererAccessibility'
+} as const satisfies Record<string, keyof DesktopLaunchConfig>
 
 export interface PlannedSwitch {
   name: string
@@ -75,13 +82,14 @@ export function readDesktopLaunchConfig(yamlText: string): DesktopLaunchConfig {
       if (sshPath) {
         out.sshPath = sshPath
       }
-    } else if (key === 'renderer_accessibility') {
+    } else if (Object.hasOwn(BOOLEAN_KEYS, key)) {
       const word = unquote(value).toLowerCase()
+      const field = BOOLEAN_KEYS[key as keyof typeof BOOLEAN_KEYS]
 
       if (['0', 'false', 'no', 'off', 'disabled'].includes(word)) {
-        out.rendererAccessibility = false
+        out[field] = false
       } else if (['1', 'true', 'yes', 'on', 'enabled'].includes(word)) {
-        out.rendererAccessibility = true
+        out[field] = true
       }
     } else if (key === 'renderer_max_old_space_mb') {
       const mb = Number.parseInt(unquote(value), 10)
