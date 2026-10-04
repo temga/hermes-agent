@@ -51,7 +51,7 @@ jobs:
           set -euo pipefail
           have=$(curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
             "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v2026." \
-            | python3 -c 'import json,sys; print("\n".join(r["ref"] for r in json.load(sys.stdin)))')
+            | grep -o '"ref": *"[^"]*"' | sed 's/.*"\(refs\/[^"]*\)"/\1/' || true)
           git ls-remote --tags https://github.com/NousResearch/hermes-agent.git 'v2026.*' \
             | awk '{ ref = $2; peeled = sub(/\^\{\}$/, "", ref); if (peeled || !(ref in sha)) sha[ref] = $1 }
                    END { for (ref in sha) print sha[ref], ref }' \
