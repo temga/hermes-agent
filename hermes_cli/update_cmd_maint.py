@@ -864,6 +864,13 @@ def _sync_profiles_after_update() -> None:
         if synced:
             print(f"\n-> Honcho: synced {synced} profile(s)")
 
+    # Bifrost edition: pre-bundle plugin copies under a home shadow the bundled ones that just updated.
+    with suppress(Exception):
+        from hermes_cli.bifrost_edition import remove_legacy_copies_all_profiles
+        removed = remove_legacy_copies_all_profiles()
+        if removed:
+            print(f"\n-> Bifrost: removed pre-bundle plugin copies (bundled now): {', '.join(removed)}")
+
 
 def _refresh_cua_driver_after_update() -> None:
     """Reconcile an installed optional package, never a user-selected external binary."""

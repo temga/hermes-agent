@@ -92,6 +92,7 @@ class TestRegisterTranscriptionProvider:
         from hermes_cli.plugins import PluginManager
 
         from agent import transcription_registry
+        from agent.transcription_provider import TranscriptionProvider
         transcription_registry._reset_for_tests()
 
         hermes_home = Path(os.environ["HERMES_HOME"])
@@ -108,7 +109,7 @@ class TestRegisterTranscriptionProvider:
 
         assert mgr._plugins["bad-stt-plugin"].enabled is True
         assert transcription_registry.get_provider("not a provider") is None
-        assert transcription_registry.list_providers() == []
+        assert all(isinstance(p, TranscriptionProvider) for p in transcription_registry.list_providers())
 
         transcription_registry._reset_for_tests()
 

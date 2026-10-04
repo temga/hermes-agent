@@ -5533,9 +5533,9 @@ async function ensureRuntime(
   if (!backend.bootstrap) {
     await advanceBootProgress('runtime.external', `Using ${backend.label}`, 32)
 
-    // Install bundled Bifrost Gateway plugins (LLM, image gen, web, STT, TTS)
-    // into ~/.hermes/plugins/ + enable in config.yaml. Idempotent — a no-op
-    // once the stamp file exists. Non-fatal: a failure logs but never blocks
+    // Route LLM, image gen, web, STT and TTS through the bundled Bifrost
+    // plugins and drop pre-bundle copies from ~/.hermes/plugins/. A no-op once
+    // configured and clean. Non-fatal: a failure logs but never blocks
     // startup. See electron/bifrost-plugins-bootstrap.ts for details.
     try {
       await ensureBifrostPlugins(HERMES_HOME, msg => rememberLog(`[bifrost-plugins] ${msg}`))

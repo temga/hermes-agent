@@ -135,24 +135,6 @@ module.exports = {
     {
       from: 'assets/icon.ico',
       to: 'icon.ico'
-    },
-    // Bifrost edition: bundled Bifrost Gateway plugins, installed on first run
-    // by electron/bifrost-plugins-bootstrap.ts.
-    {
-      from: 'resources/bifrost-plugins',
-      to: 'bifrost-plugins',
-      filter: [
-        '**/*',
-        '!**/.git',
-        '!**/.git/**',
-        '!**/.gitmodules',
-        '!**/.gitignore',
-        '!**/__pycache__',
-        '!**/__pycache__/**',
-        '!**/*.pyc',
-        '!**/*.egg-info',
-        '!**/*.egg-info/**'
-      ]
     }
   ],
   asar: {

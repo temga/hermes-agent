@@ -95,6 +95,7 @@ class TestRegisterTTSProvider:
         from hermes_cli.plugins import PluginManager
 
         from agent import tts_registry
+        from agent.tts_provider import TTSProvider
         tts_registry._reset_for_tests()
 
         hermes_home = Path(os.environ["HERMES_HOME"])
@@ -109,10 +110,10 @@ class TestRegisterTTSProvider:
             mgr = PluginManager()
             mgr.discover_and_load()
 
-        # Plugin loaded (register returned normally), but registry empty.
+        # Plugin loaded (register returned normally), but nothing registered for it.
         assert mgr._plugins["bad-tts-plugin"].enabled is True
         assert tts_registry.get_provider("not a provider") is None
-        assert tts_registry.list_providers() == []
+        assert all(isinstance(p, TTSProvider) for p in tts_registry.list_providers())
 
         tts_registry._reset_for_tests()
 

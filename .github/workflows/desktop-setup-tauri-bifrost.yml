@@ -187,7 +187,7 @@ jobs:
           - Installs the `main` branch of `temga/hermes-agent`, pinned to this release'"'"'s commit
           - Stages: prerequisites → repository → venv → python-deps → config → products → **bifrost-plugins** → setup → gateway → complete
           - `products` stage: builds the `hermes` command, TUI/web and the desktop app
-          - `bifrost-plugins` stage: clones `temga/hermes-plugin-bifrost-gateway`, copies 5 plugins to `~/.hermes/plugins/`, configures all service providers → bifrost'
+          - `bifrost-plugins` stage: routes all service providers → the Bifrost plugins bundled in the tree (`plugins/<category>/bifrost/`)'
 
           # Try to create the release; if it already exists (race with Windows job), upload instead.
           gh release create "$TAG" \
