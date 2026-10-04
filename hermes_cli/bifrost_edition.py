@@ -38,7 +38,7 @@ STAMP = Path("plugins") / ".bifrost-plugins-stamp"
 # Desktops that configured the services themselves (before this step existed) left this one.
 _LEGACY_DESKTOP_STAMP = Path(".bifrost-plugins-installed")
 # The plugin pack clone the pre-bundle installer kept for its copies.
-_LEGACY_CLONE_DIR = Path("plugins") / ".bifrost-cache"
+_LEGACY_CLONE_DIR = Path(".bifrost-cache")
 
 
 def _log(message: str) -> None:

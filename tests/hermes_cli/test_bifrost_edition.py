@@ -35,6 +35,7 @@ def test_bundled_plugins_win_over_pre_bundle_copies_and_load_unlisted(tmp_path, 
     for plugin in BIFROST_PLUGINS:
         (home / "plugins" / plugin).mkdir(parents=True)
         (home / "plugins" / plugin / "plugin.yaml").write_text("name: stale-copy\nkind: backend\n", encoding="utf-8")
+    (home / ".bifrost-cache" / ".git").mkdir(parents=True)  # the pack clone the old installer copied from
 
     assert bifrost_edition.main() == 0
     first = (home / "config.yaml").read_text(encoding="utf-8")
@@ -43,6 +44,7 @@ def test_bundled_plugins_win_over_pre_bundle_copies_and_load_unlisted(tmp_path, 
     assert (home / "config.yaml").read_text(encoding="utf-8") == first
     assert load_config()["plugins"]["clone_timeout_seconds"] == 120
     assert not any((home / "plugins" / plugin).exists() for plugin in BIFROST_PLUGINS)
+    assert not (home / ".bifrost-cache").exists()
 
     discover_plugins(force=True)
     loaded = {p["key"]: p for p in get_plugin_manager().list_plugins()}
