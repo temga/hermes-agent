@@ -1,14 +1,17 @@
 """Bifrost edition first-install step: Bifrost Gateway plugins + one-key service config.
 
-Shared by ``scripts/install.sh`` and ``scripts/install.ps1`` (stage ``bifrost-plugins``), run through
-the installation launcher: ``hermes --run-module hermes_cli.bifrost_edition``.
+Shared by ``scripts/install.sh`` and ``scripts/install.ps1`` (stage ``bifrost-plugins``) and the
+desktop's first launch (``--from`` its bundled copy), run through the installation launcher:
+``hermes --run-module hermes_cli.bifrost_edition [--from DIR]``.
 
 Clones temga/hermes-plugin-bifrost-gateway, copies its five plugins into ``$HERMES_HOME/plugins``,
 enables them, and points every service (LLM, image gen, web, STT, TTS) at Bifrost so one
 ``sk-bf-*`` key powers everything. Idempotent via a stamp file; never fails the install.
+The config write goes through ``save_config`` so there is one YAML-aware writer for both callers.
 """
 from __future__ import annotations
 
+import argparse
 import shutil
 import subprocess
 import sys
@@ -51,17 +54,22 @@ def _sync_plugin_repo(clone_dir: Path) -> bool:
     return True
 
 
-def install_plugins(home: Path) -> int:
-    """Copy the plugin directories into ``home/plugins``; returns how many were installed."""
+def install_plugins(home: Path, source: Path | None = None) -> int:
+    """Copy the plugin directories into ``home/plugins``; returns how many were installed.
+
+    ``source`` is a local copy of the plugin pack (the desktop's bundled resources); without it
+    the pack is cloned from GitHub.
+    """
     plugins_dir = home / "plugins"
-    clone_dir = home / ".bifrost-cache"
     plugins_dir.mkdir(parents=True, exist_ok=True)
-    if not _sync_plugin_repo(clone_dir):
-        return 0
-    key_resolver = clone_dir / "_keyresolver.py"
+    if source is None:
+        source = home / ".bifrost-cache"
+        if not _sync_plugin_repo(source):
+            return 0
+    key_resolver = source / "_keyresolver.py"
     copied = 0
     for plugin in BIFROST_PLUGINS:
-        src, dest = clone_dir / plugin, plugins_dir / plugin
+        src, dest = source / plugin, plugins_dir / plugin
         if not (src / "plugin.yaml").is_file():
             _log(f"Source not found: {src / 'plugin.yaml'}")
             continue
@@ -85,7 +93,9 @@ def configure(cfg: dict) -> dict:
 
     # base_url MUST be the Bifrost gateway: _keyresolver.py only resolves the key when the host is
     # router.rove-ai.ru, so the template's openrouter.ai URL 403s at runtime.
-    model = cfg.setdefault("model", {})
+    model = cfg.get("model")
+    if not isinstance(model, dict):  # the bare-string form (`model: name`) is replaced below anyway
+        model = cfg["model"] = {}
     model.update(provider="bifrost", default="turbocloud/GLM-5.2", base_url="https://router.rove-ai.ru/v1")
     cfg.setdefault("image_gen", {})["provider"] = "bifrost"
     cfg.setdefault("web", {}).update(search_backend="bifrost", extract_backend="bifrost")
@@ -104,14 +114,18 @@ def configure(cfg: dict) -> dict:
     return cfg
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="hermes --run-module hermes_cli.bifrost_edition")
+    parser.add_argument("--from", dest="source", type=Path,
+                        help="local plugin pack to copy instead of cloning it")
+    args = parser.parse_args(argv)
     home = get_hermes_home()
     stamp = home / "plugins" / ".bifrost-plugins-stamp"
     if stamp.is_file():
         _log("Bifrost plugins already installed (stamp found), skipping")
         return 0
     _log("Installing Bifrost Gateway plugins...")
-    copied = install_plugins(home)
+    copied = install_plugins(home, args.source)
     if copied:
         from hermes_cli.config import load_config, save_config
 
