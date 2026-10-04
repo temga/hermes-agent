@@ -62,7 +62,6 @@ interface GuideSession {
 export async function adoptGuideSession(
   setupProfile: string,
   canonical: GuideSession,
-  freeTierRoute: SetupStatus['free_tier_route'],
   resumeSession: OnboardingKickoffOptions['resumeSession'],
   guideRequest: AmbientGatewayRequest
 ): Promise<void> {
@@ -90,13 +89,13 @@ export async function adoptGuideSession(
   })
   prefetchGuideCatalogs(canonical.id, adoptedRuntimeId ?? canonical.id)
 
-  if (freeTierRoute) {
-    await guideRequest('config.set', {
-      session_id: adoptedRuntimeId,
-      key: 'reasoning',
-      value: 'minimal'
-    })
-  }
+  // Re-asserted on every adoption: a resumed guide session was created by an
+  // older build that only asked for minimal on the free tier.
+  await guideRequest('config.set', {
+    session_id: adoptedRuntimeId,
+    key: 'reasoning',
+    value: 'minimal'
+  })
 }
 
 export function useOnboardingKickoff({
@@ -161,7 +160,7 @@ export function useOnboardingKickoff({
       const canonical = registryHit?.sessions?.[0]
 
       if (canonical?.id) {
-        await adoptGuideSession(setupProfile, canonical, record.free_tier_route, resumeSession, guideRequest)
+        await adoptGuideSession(setupProfile, canonical, resumeSession, guideRequest)
 
         return true
       }
@@ -177,11 +176,9 @@ export function useOnboardingKickoff({
         capabilities
       )
 
-      const createOverrides: SessionCreateOverrides = { title: SETUP_CHAT_TITLE }
-
-      if (record.free_tier_route) {
-        createOverrides.reasoningEffort = 'minimal'
-      }
+      // Every guide turn is a short line and a card; extended thinking only adds
+      // a silent wait in front of each one, on whichever provider carries it.
+      const createOverrides: SessionCreateOverrides = { reasoningEffort: 'minimal', title: SETUP_CHAT_TITLE }
 
       const runtimeId = await runCreatePinnedTo(setupProfile, () =>
         createBackendSessionForSend(null, seedMessages, createOverrides)
@@ -206,7 +203,6 @@ export function useOnboardingKickoff({
       await adoptGuideSession(
         setupProfile,
         { id: storedId ?? runtimeId },
-        record.free_tier_route,
         resumeSession,
         guideRequest
       )
