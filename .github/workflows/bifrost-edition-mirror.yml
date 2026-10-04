@@ -39,3 +39,29 @@ jobs:
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # hermes_cli/version_info.py derives a git install's version from the nearest upstream
+      # CalVer release tag (vYYYY.M.D) in its history. An upstream sync merges the commits but not
+      # the tags, so installs kept reporting the last release the fork happened to carry (0.19.1).
+      # Mirror the missing ones as lightweight tags on their commits; a release whose commit main
+      # does not contain yet is skipped (422) and picked up after the next sync. Tags created with
+      # GITHUB_TOKEN trigger no workflows.
+      - name: Mirror upstream release tags
+        run: |
+          set -euo pipefail
+          have=$(curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v2026." \
+            | python3 -c 'import json,sys; print("\n".join(r["ref"] for r in json.load(sys.stdin)))')
+          git ls-remote --tags https://github.com/NousResearch/hermes-agent.git 'v2026.*' \
+            | awk '{ ref = $2; peeled = sub(/\^\{\}$/, "", ref); if (peeled || !(ref in sha)) sha[ref] = $1 }
+                   END { for (ref in sha) print sha[ref], ref }' \
+            | while read -r sha ref; do
+                grep -qx "$ref" <<<"$have" && continue
+                status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+                  -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+                  "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/git/refs" \
+                  -d "{\"ref\":\"$ref\",\"sha\":\"$sha\"}")
+                echo "$ref -> $sha: HTTP $status"
+              done
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
