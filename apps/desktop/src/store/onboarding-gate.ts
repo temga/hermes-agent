@@ -61,13 +61,42 @@ export function guidedOnboardingActive(): boolean {
   return isOnboardingEnabled() && (phase === 'pending' || phase === 'guided' || phase === 'handoff')
 }
 
+function queueGuide(): void {
+  setPhase('pending')
+  $onboardingGate.set({ ...$onboardingGate.get(), guideQueued: true })
+}
+
 export function beginOnboardingFlow(firstRunSkipped: boolean): void {
   if (!isOnboardingEnabled() || firstRunSkipped || $onboardingGate.get().phase !== 'idle') {
     return
   }
 
-  setPhase('pending')
-  $onboardingGate.set({ ...$onboardingGate.get(), guideQueued: true })
+  queueGuide()
+}
+
+// The guide runs on the user's own provider when no free tier carries the first
+// launch. Until that provider exists the guide must step aside (a pending phase
+// also holds back the provider picker) without being recorded as skipped, so it
+// can start once the user has connected one.
+let awaitingProvider = false
+
+export function deferGuideUntilProvider(): void {
+  if (isOnboardingEnabled() && $onboardingGate.get().phase === 'pending') {
+    awaitingProvider = true
+    setPhase('idle')
+  }
+}
+
+/** Queue a guide deferred by `deferGuideUntilProvider`; true when it was queued. */
+export function requeueDeferredGuide(): boolean {
+  if (!isOnboardingEnabled() || !awaitingProvider || $onboardingGate.get().phase !== 'idle') {
+    return false
+  }
+
+  awaitingProvider = false
+  queueGuide()
+
+  return true
 }
 
 export function runGuideKickoff(kickoff: () => Promise<boolean>): Promise<boolean> {

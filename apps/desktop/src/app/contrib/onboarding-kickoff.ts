@@ -12,12 +12,13 @@ import {
 import { $setupSession, guideSourceConnectionId, SETUP_CHAT_TITLE } from '@/components/onboarding-chat/setup-profile'
 import { chatMessageText } from '@/lib/chat-messages'
 import { isOnboardingEnabled } from '@/lib/onboarding-enabled'
+import { evaluateRuntimeReadiness } from '@/lib/runtime-readiness'
 import { prefetchConnectorCatalog } from '@/store/connector-catalog'
 import { activeGatewayConnectionId, requestGatewayForProfile } from '@/store/gateway'
 import { loadMachineProfile } from '@/store/machine'
 import { notify } from '@/store/notifications'
 import { readOnboardingCapabilities } from '@/store/onboarding-capabilities'
-import { skipGuide } from '@/store/onboarding-gate'
+import { deferGuideUntilProvider, skipGuide } from '@/store/onboarding-gate'
 import { prefetchOnboardingPlugins } from '@/store/onboarding-plugins'
 import { buildChatOnboardingSeedMessages } from '@/store/onboarding-script'
 import {
@@ -118,6 +119,18 @@ export function useOnboardingKickoff({
     let swapped = false
 
     try {
+      // The setup profile clones the active profile's config and secrets when it
+      // is created, so creating it before a usable credential exists would strand
+      // the guide without one for good. `setup.status` is not that check: a pinned
+      // provider with no key already counts as configured there.
+      const active = await evaluateRuntimeReadiness(requestGateway, { unknownReady: false })
+
+      if (!active.ready) {
+        deferGuideUntilProvider()
+
+        return false
+      }
+
       const { name: setupProfile } = await requestGateway<OnboardingEnsureSetupProfileResult>(
         'onboarding.ensure_setup_profile',
         {}

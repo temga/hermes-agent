@@ -9,6 +9,7 @@ import {
   $guideOpening,
   $onboardingGate,
   beginOnboardingFlow,
+  requeueDeferredGuide,
   runGuideKickoff,
   skipGuide
 } from '@/store/onboarding-gate'
@@ -53,6 +54,27 @@ export function OnboardingChatGate({ enabled, onKickoff, requestGateway }: Onboa
       }
     })
   }, [enabled, requestGateway])
+
+  useEffect(() => {
+    if (!isOnboardingEnabled()) {
+      return
+    }
+
+    // Only a transition to configured counts: the store replays its current
+    // value on subscribe, and a stale `configured` the guide's own readiness
+    // check disagreed with would otherwise requeue it in a loop.
+    let wasConfigured = $desktopOnboarding.get().configured === true
+
+    return $desktopOnboarding.subscribe(({ configured }) => {
+      const nowConfigured = configured === true
+
+      if (nowConfigured && !wasConfigured && requeueDeferredGuide()) {
+        takeGuideShape()
+      }
+
+      wasConfigured = nowConfigured
+    })
+  }, [])
 
   useEffect(() => {
     if (enabled && gate.guideQueued) {
