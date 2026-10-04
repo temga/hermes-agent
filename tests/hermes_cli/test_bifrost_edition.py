@@ -59,3 +59,19 @@ def test_key_resolver_copies_match():
     bundled copies must not drift apart."""
     copies = {plugin: (_BUNDLED / plugin / "_keyresolver.py").read_text(encoding="utf-8") for plugin in BIFROST_PLUGINS}
     assert len(set(copies.values())) == 1, sorted(copies)
+
+
+def test_default_model_is_in_the_bifrost_catalog(monkeypatch):
+    """A fresh install's default must be a model the bifrost provider offers on the shared gateway even
+    though the gateway's /v1/models omits it (``auto`` is a routing rule there), while a self-hosted
+    Bifrost's listing passes through untouched."""
+    from providers import get_provider_profile
+    from providers.base import ProviderProfile
+
+    listing = ["neuraldeep/qwen3.8-27b", "neuraldeep/kimi-k2.6"]
+    monkeypatch.setattr(ProviderProfile, "fetch_models", lambda self, **_kwargs: list(listing))
+    profile = get_provider_profile("bifrost")
+    model = configure({})["model"]
+
+    assert model["default"] in profile.fetch_models(api_key="sk-bf-test", base_url=model["base_url"])
+    assert profile.fetch_models(api_key="sk-bf-test", base_url="https://bifrost.example/v1") == listing

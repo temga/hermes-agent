@@ -184,13 +184,22 @@ def _reachable_models(slug: str, models: list[str]) -> list[str]:
     ``/api/model/set`` accepts. (The picker catalog merges the curated list into it and cannot
     tell.) Fetched live: this endpoint runs once per sign-in, never on a hot path. No listing
     (offline, no models endpoint) keeps *models*; a listing sharing nothing with them does too —
-    its rows may be embeddings or speech models."""
+    its rows may be embeddings or speech models. A profile that overrides ``fetch_models`` owns its
+    catalog (as in validation's ``_profile_catalog``): a gateway-routed id the raw listing omits
+    (Bifrost's ``auto``) is still reachable."""
     from hermes_cli.models import fetch_api_models
     from hermes_cli.runtime_provider import resolve_runtime_provider
+    from providers import get_provider_profile
+    from providers.base import ProviderProfile
 
     try:
         runtime = resolve_runtime_provider(requested=slug)
-        listed = fetch_api_models(runtime.get("api_key"), runtime.get("base_url"))
+        api_key, base_url = runtime.get("api_key"), runtime.get("base_url")
+        profile = get_provider_profile(slug)
+        if profile is not None and type(profile).fetch_models is not ProviderProfile.fetch_models:
+            listed = profile.fetch_models(api_key=api_key, base_url=base_url)
+        else:
+            listed = fetch_api_models(api_key, base_url)
     except Exception:
         _log.debug("live listing for %s unavailable", slug, exc_info=True)
         return models

@@ -42,3 +42,17 @@ def test_configured_model_is_kept_only_while_the_listing_carries_it(recommend):
     assert recommend(listed=CURATED, current_model="vendor/third") == "vendor/third"
     assert recommend(listed=["vendor/second"], current_model="vendor/unreachable") == "vendor/second"
     assert recommend(listed=CURATED, current_model="vendor/third", current_provider="other") == "vendor/unreachable"
+
+
+def test_a_profile_owned_catalog_decides_reachability(recommend, monkeypatch):
+    """A profile that overrides ``fetch_models`` owns its catalog: an id the raw listing omits but the
+    profile serves (a gateway-routed model) stays recommendable, exactly as validation accepts it."""
+    import providers
+    from providers.base import ProviderProfile
+
+    class Gateway(ProviderProfile):
+        def fetch_models(self, **_kwargs):
+            return ["vendor/unreachable", "vendor/second"]
+
+    monkeypatch.setattr(providers, "get_provider_profile", lambda _slug: Gateway(name="gw"))
+    assert recommend(listed=["vendor/second"]) == "vendor/unreachable"

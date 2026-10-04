@@ -74,7 +74,7 @@ def configure(cfg: dict) -> dict:
     model = cfg.get("model")
     if not isinstance(model, dict):  # the bare-string form (`model: name`) is replaced below anyway
         model = cfg["model"] = {}
-    model.update(provider="bifrost", default="turbocloud/GLM-5.2", base_url="https://router.rove-ai.ru/v1")
+    model.update(provider="bifrost", default="auto", base_url="https://router.rove-ai.ru/v1")
     cfg.setdefault("image_gen", {})["provider"] = "bifrost"
     cfg.setdefault("web", {}).update(search_backend="bifrost", extract_backend="bifrost")
     stt = cfg.setdefault("stt", {})
