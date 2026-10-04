@@ -42,6 +42,7 @@ def write_source_stamp(root: Path, *, adopted: bool = False) -> dict | None:
         "baseVersion": info.base_version,
         "displayVersion": info.derived_version,
         "distance": info.distance,
+        "edition": info.edition,
         "payload": "bootstrap",
         "tag": None,
     }

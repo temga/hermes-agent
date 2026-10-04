@@ -274,3 +274,77 @@ def test_old_updater_version_stub_reads_the_same_stamp_as_version_info(tmp_path)
     unstamped = tmp_path / "unstamped"
     unstamped.mkdir()
     assert read(unstamped)[0] == "0.0.0"
+
+
+def test_bifrost_release_names_the_version_on_top_of_the_upstream_base(tmp_path, monkeypatch):
+    """A Bifrost Edition checkout reads ``<upstream>-bifrost.<N>+<since>`` from git and from the
+    stamp written for it, while ``base_version`` stays upstream's for compatibility checks."""
+    from hermes_cli.source_stamp import write_source_stamp
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    def git(*args: str) -> str:
+        result = subprocess.run(
+            ["git", *args], cwd=repo, text=True, capture_output=True, check=True,
+            env={"HOME": str(tmp_path), "PATH": __import__("os").environ["PATH"]},
+        )
+        return result.stdout.strip()
+
+    git("init", "-q")
+    git("config", "user.name", "Hermes Test")
+    git("config", "user.email", "hermes@example.invalid")
+    (repo / "pyproject.toml").write_text('[project]\nname = "hermes-agent"\nversion = "0.21.5"\n', encoding="utf-8")
+    git("add", "pyproject.toml")
+    git("commit", "-qm", "upstream release")
+    git("tag", "v2026.9.24")
+    git("commit", "-q", "--allow-empty", "-m", "fork fix")
+    # Named after an older base on purpose: only the release number is taken from the tag.
+    git("tag", "v0.21.4-bifrost-setup.5")
+    git("commit", "-q", "--allow-empty", "-m", "after the release")
+    git("commit", "-q", "--allow-empty", "-m", "and another")
+    (repo / ".gitignore").write_text("install-stamp.json\n", encoding="utf-8")
+    git("add", ".gitignore")
+    git("commit", "-qm", "ignore the stamp")
+
+    monkeypatch.setattr("hermes_cli.version_info._resolve_stamp_file", lambda: None)
+    monkeypatch.setattr("hermes_cli.version_info._resolve_repo_dir", lambda: repo)
+    live = get_version_info()
+
+    assert live.base_version == "0.21.5"
+    assert live.display_version == "0.21.5-bifrost.5+3"
+    assert live.derived_version == f"0.21.5-bifrost.5+3.g{git('rev-parse', '--short=7', 'HEAD')}"
+
+    write_source_stamp(repo)
+    monkeypatch.setattr("hermes_cli.version_info._resolve_stamp_file", lambda: repo / "install-stamp.json")
+    _reset_version_info_cache()
+    stamped = get_version_info()
+
+    assert (stamped.base_version, stamped.display_version, stamped.derived_version) == (
+        live.base_version, live.display_version, live.derived_version)
+
+
+def test_bifrost_release_tag_itself_reads_without_a_distance(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ["git", *args], cwd=repo, text=True, capture_output=True, check=True,
+            env={"HOME": str(tmp_path), "PATH": __import__("os").environ["PATH"]},
+        ).stdout.strip()
+
+    git("init", "-q")
+    git("config", "user.name", "Hermes Test")
+    git("config", "user.email", "hermes@example.invalid")
+    (repo / "pyproject.toml").write_text('[project]\nname = "hermes-agent"\nversion = "0.21.5"\n', encoding="utf-8")
+    git("add", "pyproject.toml")
+    git("commit", "-qm", "upstream release")
+    git("tag", "v2026.9.24")
+    git("commit", "-q", "--allow-empty", "-m", "fork fix")
+    git("tag", "v0.21.5-bifrost.6")
+
+    monkeypatch.setattr("hermes_cli.version_info._resolve_stamp_file", lambda: None)
+    monkeypatch.setattr("hermes_cli.version_info._resolve_repo_dir", lambda: repo)
+
+    assert get_version_info().display_version == "0.21.5-bifrost.6"

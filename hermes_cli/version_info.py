@@ -12,6 +12,7 @@ Resolution order:
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import tomllib
 from dataclasses import dataclass
@@ -33,15 +34,22 @@ class VersionInfo:
     dirty: bool = False
     commit_date: int | None = None
     distribution: Literal["docker", "nix", "desktop-app"] | None = None
+    # Bifrost Edition release on top of ``base_version`` (``bifrost.5``); ``distance`` then counts
+    # from that release. ``base_version`` stays upstream's so compatibility checks are unchanged.
+    edition: str | None = None
 
     @property
     def display_version(self) -> str:
-        """``<base>+<distance>`` when a release is known, else the derived identity.
+        """``<base>[-<edition>]+<distance>`` when a release is known, else the derived identity.
         Keep a tagless checkout's ``git.<sha>`` rather than reducing it to unknown.
         """
         if self.base_version == "unknown":
             return self.derived_version
-        return _derived_version(self.base_version, self.distance)
+        return _derived_version(_release_label(self.base_version, self.edition), self.distance)
+
+
+def _release_label(base_version: str, edition: str | None) -> str:
+    return f"{base_version}-{edition}" if edition else base_version
 
 
 def _derived_version(
@@ -113,6 +121,26 @@ def _calver_release_version(repo_dir: Path) -> tuple[str, int] | None:
     if distance is None or not isinstance(version, str) or not STABLE_TAG_RE.fullmatch(f"v{version}"):
         return None
     return version, distance
+
+
+# Bifrost Edition releases: ``v<upstream>-bifrost.<N>``; releases before that naming were tagged
+# ``v<upstream>-bifrost-setup.<N>``. Only the number is kept: the base is whatever upstream release
+# the checkout carries, so a tag named after an older base cannot misreport it.
+_EDITION_TAG_RE = re.compile(r"v\d+\.\d+\.\d+-bifrost(?:-setup)?\.(\d+)")
+
+
+def _edition_release(repo_dir: Path) -> tuple[str, int] | None:
+    """The nearest Bifrost Edition release in HEAD's history and the commits since it."""
+    described = _run_git(repo_dir, "describe", "--tags", "--long",
+                         "--match", "v*-bifrost.*", "--match", "v*-bifrost-setup.*", "HEAD")
+    if not described:
+        return None
+    tag, count, _ = described.rsplit("-", 2)
+    match = _EDITION_TAG_RE.fullmatch(tag)
+    distance = _parse_nonnegative(count)
+    if match is None or distance is None:
+        return None
+    return f"bifrost.{match[1]}", distance
 
 
 # --- Install stamp reader ---------------------------------------------------
@@ -187,6 +215,7 @@ def _stamp_version_info() -> VersionInfo | None:
     commit_date = data.get("commitDate")
     if not isinstance(commit_date, int):
         commit_date = None
+    edition = data.get("edition")
 
     return VersionInfo(
         base_version,
@@ -198,6 +227,7 @@ def _stamp_version_info() -> VersionInfo | None:
         bool(data.get("dirty")),
         commit_date,
         distribution,
+        edition if isinstance(edition, str) and edition else None,
     )
 
 
@@ -246,14 +276,17 @@ def _git_version_info(repo_dir: Path, *, include_untracked: bool = False) -> Ver
     ) if releases else None
     if not releases:
         base_version, distance = _calver_release_version(repo_dir) or ("unknown", None)
+    edition = None
+    if base_version != "unknown" and (release := _edition_release(repo_dir)) is not None:
+        edition, distance = release
     short_commit = _run_git(repo_dir, "rev-parse", "--short=7", "HEAD")
     if base_version == "unknown" and short_commit:
         display_version = f"git.{short_commit}{'.dirty' if dirty else ''}"
     else:
-        display_version = _derived_version(base_version, distance, dirty, short_commit)
+        display_version = _derived_version(_release_label(base_version, edition), distance, dirty, short_commit)
 
     return VersionInfo(
-        base_version, display_version, distance, commit, branch, "git", dirty, commit_date
+        base_version, display_version, distance, commit, branch, "git", dirty, commit_date, edition=edition
     )
 
 

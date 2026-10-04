@@ -3,6 +3,8 @@ name: Build Hermes Setup (Bifrost Tauri installer)
 on:
   push:
     tags:
+      # v<upstream>-bifrost.<N>: the release name clients see (hermes_cli/version_info.py).
+      - 'v*-bifrost.*'
       - 'v*-bifrost-setup.*'
   workflow_dispatch:
     inputs:
