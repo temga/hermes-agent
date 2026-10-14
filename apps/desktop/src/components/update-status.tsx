@@ -7,6 +7,7 @@ import { Codicon } from '@/components/ui/codicon'
 import type { DesktopUpdateStatus, DesktopVersionInfo } from '@/global'
 import { type Translations, useI18n } from '@/i18n'
 import { AlertTriangle, CheckCircle2, ExternalLink, Loader2, RefreshCw } from '@/lib/icons'
+import { rollbackRelease } from '@/lib/update-copy'
 import { cn } from '@/lib/utils'
 import { shortVersion } from '@/lib/version-label'
 import {
@@ -74,6 +75,8 @@ interface UpdateStatusInput {
   u: Translations['updates']
   /** Names the pinned release when a source install is current on stable. */
   latestRelease?: (version: string) => string
+  /** Names a move back to an older stable release the checkout already contains. */
+  rollback?: (version: string) => string
 }
 
 export function deriveUpdateStatus(input: UpdateStatusInput): UpdateStatusView {
@@ -91,10 +94,27 @@ export function deriveUpdateStatus(input: UpdateStatusInput): UpdateStatusView {
   return ordinaryUpdateStatus(input)
 }
 
+/** The waiting update, or the older stable release it would move back to. */
+function availableLine(
+  status: DesktopUpdateStatus | null,
+  behind: number,
+  u: Translations['updates'],
+  rollback?: (version: string) => string
+): string {
+  const back = rollbackRelease(status)
+
+  if (rollback && back) {
+    return rollback(back)
+  }
+
+  return behind > 0 ? u.updateReady(behind) : u.updateReadyUnknown
+}
+
 function ordinaryUpdateStatus({
   apply,
   checking,
   latestRelease,
+  rollback,
   status,
   target,
   u
@@ -128,7 +148,7 @@ function ordinaryUpdateStatus({
   if (updateAvailable) {
     return {
       applying,
-      line: behind > 0 ? u.updateReady(behind) : u.updateReadyUnknown,
+      line: availableLine(status, behind, u, rollback),
       supported,
       tone: 'available',
       updateAvailable
@@ -313,6 +333,7 @@ export function UpdateStatusCard({
     apply,
     checking,
     latestRelease: t.settings.about.channel.latestRelease,
+    rollback: t.settings.about.channel.rollbackBody,
     status,
     target,
     u
