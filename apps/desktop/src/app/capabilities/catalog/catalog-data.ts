@@ -3,6 +3,7 @@ import { queryOptions, useQuery } from '@tanstack/react-query'
 
 import { CATALOG_ORIGIN } from '@/lib/plugin-catalog'
 import { queryClient } from '@/lib/query-client'
+import { hubCatalogBase } from '@/store/hub-url'
 
 import { curatedFeaturedRank, curationOwnsArtwork, officialCatalogArtwork } from './catalog-curation'
 
@@ -48,6 +49,7 @@ export interface CatalogEntry {
 // The public domain redirects here without CORS headers on the redirect.
 // Use the docs' actual static host, not GitHub's API or repository endpoints.
 const CATALOG_BASE = 'https://nousresearch.github.io/hermes-agent/docs/api'
+// A `skills.hub_url` mirror (store/hub-url.ts) replaces it where that host is blocked.
 /** A download with no new bytes for this long is aborted (inactivity, not total time). */
 const CATALOG_STALL_MS = 60_000
 const text = (value: unknown): string => (typeof value === 'string' ? value : '')
@@ -218,7 +220,7 @@ export async function fetchCatalog(kind: CatalogKind): Promise<CatalogEntry[]> {
 
   try {
     // Same published snapshots as the docs galleries; no per-entry fan-out.
-    const response = await fetch(`${CATALOG_BASE}/${kind}.json`, {
+    const response = await fetch(`${hubCatalogBase() ?? CATALOG_BASE}/${kind}.json`, {
       credentials: 'omit',
       signal: controller.signal
     })

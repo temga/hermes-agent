@@ -3,6 +3,7 @@ import './ui/page.css'
 import type * as React from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
+import { useGatewayRequest } from '@/app/gateway/hooks/use-gateway-request'
 import { PageLoader } from '@/components/page-loader'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
@@ -11,6 +12,7 @@ import { invalidateSlashCompletions } from '@/lib/slash-completion-cache'
 import { useStoreSelector } from '@/lib/use-session-slice'
 import { $gateway } from '@/store/gateway'
 import { OFFICIAL_SKILLS_KEY } from '@/store/hub-actions'
+import { resolveHubUrl } from '@/store/hub-url'
 
 import { useRefreshHotkey } from '../hooks/use-refresh-hotkey'
 import { useRouteEnumParam } from '../hooks/use-route-enum-param'
@@ -98,6 +100,9 @@ export function CapabilitiesView({
 
   // Plugins is small enough to warm from any tab. Skills (~100k rows) only
   // loads when asked for: an idle parse of it would still block the page.
+  // The `skills.hub_url` mirror must be known before the catalog fetches.
+  const { requestGateway } = useGatewayRequest()
+  useEffect(() => void resolveHubUrl(requestGateway), [requestGateway])
   useEffect(() => (mode === 'plugins' ? undefined : prefetchCatalogWhenIdle('plugins')), [mode])
   useEffect(syncCatalogArcs, [])
 

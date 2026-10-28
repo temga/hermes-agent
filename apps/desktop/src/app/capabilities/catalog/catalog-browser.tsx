@@ -279,6 +279,7 @@ function CatalogLoadState({ error, onRetry }: { error: Error | null; onRetry: ()
   return (
     <div className="grid h-full place-items-center p-5">
       <ErrorState description={error.message} title={c.loadFailed}>
+        <p className="max-w-prose text-center text-xs leading-5 text-muted-foreground">{t.skills.hub.pickerBlocked}</p>
         <Button onClick={onRetry} size="sm" variant="secondary">
           {c.retry}
         </Button>

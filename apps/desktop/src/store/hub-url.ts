@@ -1,50 +1,54 @@
 /**
- * Skills Hub URL — resolves the base origin for the embedded hub picker
- * iframe and the backend skills index.
+ * Skills Hub mirror — `skills.hub_url` in config.yaml.
  *
- * The default (`https://hermes-agent.nousresearch.com`) is blocked by CDN
- * geofencing in some regions (e.g. Russia → Vercel/Fastly 403). The user
- * overrides it via `skills.hub_url` in config.yaml; an empty value keeps
- * the default.
+ * The public catalog host is unreachable in some regions (e.g. Russia → CDN
+ * geofencing 403). `skills.hub_url` names a mirror origin of the docs site;
+ * the catalog then reads its JSON snapshots from `<origin>/docs/api/`. An
+ * empty value keeps the public catalog.
  */
 import { atom } from 'nanostores'
 
-export const DEFAULT_HUB_ORIGIN = 'https://hermes-agent.nousresearch.com'
+import { queryClient } from '@/lib/query-client'
 
-/** The resolved hub origin (no trailing slash). Updated by {@link resolveHubUrl}. */
-export const $hubOrigin = atom<string>(DEFAULT_HUB_ORIGIN)
+/** The configured mirror origin (no trailing slash), or null for the public catalog. */
+export const $hubOrigin = atom<string | null>(null)
 
-let fetched = false
+let resolved = false
 
 /**
- * Fetch `skills.hub_url` from the gateway config. Called once on mount of
- * the first hub-picker component; the result is cached in `$hubOrigin` for
- * the session. Uses the provided `requestGateway` from `useGatewayRequest`.
+ * Read `skills.hub_url` from the gateway config once per app session. A new
+ * origin drops any catalog fetched from the public host before the config
+ * arrived, so the next read goes to the mirror. A failed read (gateway not
+ * up yet) is retried on the next call.
  */
 export async function resolveHubUrl(
   requestGateway: <T = unknown>(method: string, params?: Record<string, unknown>) => Promise<T>
 ): Promise<void> {
-  if (fetched) {
+  if (resolved) {
     return
   }
-  fetched = true
+
+  let override: string | undefined
+
   try {
     const result = await requestGateway<{ value?: string }>('config.get', { key: 'skills.hub_url' })
-    const override = result?.value?.trim()
-    if (override) {
-      $hubOrigin.set(override.replace(/\/+$/, ''))
-    }
+    override = result?.value?.trim()
+    resolved = true
   } catch {
-    // Config read failed — keep the default
+    return
   }
+
+  if (!override) {
+    return
+  }
+
+  $hubOrigin.set(override.replace(/\/+$/, ''))
+  void queryClient.resetQueries({ queryKey: ['public-catalog'] })
 }
 
-/** Build the picker iframe URL from the current origin. */
-export function hubPickerUrl(): string {
-  return $hubOrigin.get() + '/docs/skills?embed=picker'
-}
+/** The mirror's catalog API base, or null when no mirror is configured. */
+export function hubCatalogBase(): string | null {
+  const origin = $hubOrigin.get()
 
-/** The origin string to check against in postMessage handlers. */
-export function hubOrigin(): string {
-  return $hubOrigin.get()
+  return origin ? `${origin}/docs/api` : null
 }
