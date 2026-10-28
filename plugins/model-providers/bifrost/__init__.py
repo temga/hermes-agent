@@ -26,15 +26,19 @@ from ._keyresolver import resolve_bifrost_key, resolve_bifrost_base_url
 # so the core key resolver (which reads env_vars from the profile) finds the
 # key even when the user added Bifrost as a custom provider with a different
 # env-var name (e.g. HERMES_CUSTOM_ROVE_API_KEY).  This runs at import time,
-# before the agent init reads the profile's env_vars.
-if not os.environ.get("BIFROST_API_KEY"):
-    _seeded = resolve_bifrost_key()
-    if _seeded:
-        os.environ["BIFROST_API_KEY"] = _seeded
-if not os.environ.get("BIFROST_BASE_URL"):
-    _seeded_url = resolve_bifrost_base_url()
-    if _seeded_url:
-        os.environ["BIFROST_BASE_URL"] = _seeded_url
+# before the agent init reads the profile's env_vars.  Never while multiplexing: os.environ is
+# shared by every served profile, and there is no profile scope to resolve against at import.
+from agent.secret_scope import is_multiplex_active
+
+if not is_multiplex_active():
+    if not os.environ.get("BIFROST_API_KEY"):
+        _seeded = resolve_bifrost_key()
+        if _seeded:
+            os.environ["BIFROST_API_KEY"] = _seeded
+    if not os.environ.get("BIFROST_BASE_URL"):
+        _seeded_url = resolve_bifrost_base_url()
+        if _seeded_url:
+            os.environ["BIFROST_BASE_URL"] = _seeded_url
 
 # Default gateway URL (local Bifrost instance)
 _DEFAULT_BASE_URL = os.environ.get("BIFROST_BASE_URL", "https://router.rove-ai.ru/v1")

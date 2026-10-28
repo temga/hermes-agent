@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 from typing import Any, Dict, List
 
@@ -24,11 +23,9 @@ import requests
 
 from agent.web_search_provider import WebSearchProvider
 
-from ._keyresolver import resolve_bifrost_key
+from ._keyresolver import resolve_bifrost_base_url, resolve_bifrost_key
 
 logger = logging.getLogger(__name__)
-
-_DEFAULT_BASE_URL = "https://router.rove-ai.ru"
 
 # MCP protocol version we speak
 _MCP_PROTOCOL = "2024-11-05"
@@ -170,11 +167,8 @@ class BifrostWebSearchProvider(WebSearchProvider):
         key = resolve_bifrost_key()
         if not key:
             return None
-        base = os.environ.get("BIFROST_BASE_URL", _DEFAULT_BASE_URL)
-        # Strip /v1 suffix if present — /mcp is at the gateway root
-        if base.endswith("/v1"):
-            base = base[:-3]
-        return BifrostMCPClient(base, key)
+        # /mcp is at the gateway root, not under /v1
+        return BifrostMCPClient(resolve_bifrost_base_url().removesuffix("/v1"), key)
 
     def supports_search(self) -> bool:
         return True
