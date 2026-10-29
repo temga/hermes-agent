@@ -32,14 +32,19 @@ def _hermes_index_url() -> str:
     """Resolve the skills index URL: config override ``skills.hub_url`` or default.
 
     Allows users behind CDN blocks (e.g. Russia → Vercel/Fastly 403) to point
-    at a mirror of the index JSON.
+    at a mirror. ``skills.hub_url`` names the mirror's origin, the same value
+    Desktop reads its catalog from (``<origin>/docs/api/``); a value that already
+    names a ``.json`` file is taken as the index URL itself.
     """
     try:
         from hermes_cli.config import cfg_get, load_config_readonly
 
         override = cfg_get(load_config_readonly(), "skills", "hub_url", default=None)
         if isinstance(override, str) and override.strip():
-            return override.strip()
+            override = override.strip()
+            if override.lower().endswith(".json"):
+                return override
+            return override.rstrip("/") + "/docs/api/skills-index.json"
     except Exception:  # pragma: no cover - config loading must never break search
         logger.debug("skills index: config override lookup failed", exc_info=True)
     return DEFAULT_HERMES_INDEX_URL

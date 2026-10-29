@@ -1478,8 +1478,9 @@ DEFAULT_CONFIG = {
         "ledger_max_bytes": 5 * 1024 * 1024,
         # Override the Skills Hub index/docs URL. Used when the default
         # (hermes-agent.nousresearch.com) is blocked by CDN geofencing (e.g.
-        # Russia → Vercel/Fastly 403). Points at a mirror serving the same
-        # /docs/api/skills-index.json payload and /docs/skills?embed=picker page.
+        # Russia → Vercel/Fastly 403). The mirror's origin: it serves the same
+        # /docs/api/skills-index.json (CLI search) and /docs/api/{skills,plugins}.json
+        # (Desktop catalog) payloads.
         "hub_url": "",
     },
 
