@@ -653,6 +653,14 @@ is_official_repo() {
         | grep -Eq '^(https://github\.com/|git@github\.com:|ssh://git@github\.com/)nousresearch/hermes-agent(\.git)?/?$'
 }
 
+# Bifrost edition: the stable channel resolves upstream's releases (NousResearch's
+# API and tags), and the fork mirrors those tags, so --channel stable on a fork
+# checkout would land on an upstream release without the Bifrost changes.
+if [ "$CHANNEL" = stable ] && ! is_official_repo "$REPO_URL"; then
+    printf -- '--channel stable installs official releases only; %s ships from its main branch (use --channel main or omit --channel)\n' "$REPO_URL" >&2
+    exit 2
+fi
+
 # The latest published stable release (vX.Y.Z), the release `hermes update` resolves for the
 # stable channel. github.com's /releases/latest redirect answers when the API quota is spent, and
 # origin's highest vX.Y.Z tag (final tags are pushed by the publication run) when github.com's web

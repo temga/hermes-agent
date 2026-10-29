@@ -1018,6 +1018,12 @@ function Stage-Repository {
     $chosen = ''
     $release = ''
     if ($Channel -and $Channel -cnotin @('stable', 'main')) { Fail "-Channel must be stable or main, not $Channel" other }
+    # Bifrost edition: the stable channel resolves upstream's releases (NousResearch's API and
+    # tags), and the fork mirrors those tags, so -Channel stable on a fork checkout would land on an
+    # upstream release without the Bifrost changes.
+    if ($Channel -ceq 'stable' -and $RepoUrl -notmatch '^(https://github\.com/|git@github\.com:|ssh://git@github\.com/)NousResearch/hermes-agent(\.git)?/?$') {
+        Fail "-Channel stable installs official releases only; $RepoUrl ships from its main branch (use -Channel main or omit -Channel)" other
+    }
     # Refuse an occupied non-checkout before provisioning Git. This check
     # needs no tool download and must not overwrite a user's existing files.
     if (-not (Test-Path (Join-Path $InstallDir ".git")) -and (Test-Path -LiteralPath $InstallDir)) {

@@ -59,7 +59,8 @@ def test_install_ps1_lands_on_the_latest_stable_release(tmp_path, side, start, c
     commits["tip"] = _git(origin, "rev-parse", "HEAD")
     gitconfig = tmp_path / "gitconfig"
     gitconfig.write_text(f'[url "{origin.as_uri()}"]\n  insteadOf = {OFFICIAL}\n', encoding="utf-8")
-    env = {**os.environ, "GIT_CONFIG_GLOBAL": str(gitconfig), "NO_COLOR": "1"}
+    # The Bifrost edition installs from the fork by default; this covers the official repository's path.
+    env = {**os.environ, "GIT_CONFIG_GLOBAL": str(gitconfig), "NO_COLOR": "1", "HERMES_REPO_URL": OFFICIAL}
     env.pop("HERMES_INSTALL_CHANNEL", None)
     if start:
         _git(tmp_path, "clone", "-q", OFFICIAL, str(install), env=env)
