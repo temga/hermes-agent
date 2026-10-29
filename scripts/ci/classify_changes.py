@@ -357,6 +357,7 @@ _UPDATE_DEPENDENCIES = (
     "hermes_cli/build_info.py",
     "hermes_cli/image_provenance.py",
     "hermes_cli/backup.py",  # pre-update backup
+    "hermes_cli/bifrost_edition.py",  # update_cmd_maint drops pre-bundle Bifrost plugin copies
     "hermes_cli/backup_cron_prompts.py",  # restore_cron_prompt_fields_if_degraded (update_cmd_config)
     "hermes_cli/backup_restore.py",
     "hermes_cli/config_backend.py",  # update_channel writes the channel key through the seam
