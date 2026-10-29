@@ -48,19 +48,23 @@ def test_non_ascii_detection_helper_exists():
 
 
 def test_install_desktop_swaps_non_ascii_paths_before_pack():
-    """The desktop build must collapse non-ASCII cwd/TEMP before npm run pack."""
-    source = _ps1()
-    pack = re.search(r"& \$npmExe run pack", source)
-    assert pack, "npm run pack invocation not found"
-    pack_pos = pack.start()
+    """The desktop build must collapse a non-ASCII TEMP before the products build.
 
-    # Look backwards from the pack invocation for the non-ASCII swap block.
-    region = source[max(0, pack_pos - 3000) : pack_pos]
+    Upstream folded `npm run pack` into the products step (hermes_cli/source_completion.py
+    --desktop), so the swap now guards that invocation.
+    """
+    source = _ps1()
+    build = re.search(r"Invoke-Logged \"Building the hermes command and apps\"", source)
+    assert build, "products build invocation not found"
+    build_pos = build.start()
+
+    # Look backwards from the build invocation for the non-ASCII swap block.
+    region = source[max(0, build_pos - 3000) : build_pos]
     assert "Test-PathHasNonAscii" in region, (
-        "Install-Desktop must check for non-ASCII in cwd/TEMP before npm run pack"
+        "the products build must check for non-ASCII in TEMP before the native desktop build"
     )
     assert "Get-ShortPath" in region, (
-        "Install-Desktop must collapse non-ASCII paths to short form before npm run pack"
+        "the products build must collapse non-ASCII paths to short form before the native desktop build"
     )
     assert re.search(r"\$env:TEMP\s*=\s*\$shortTemp", region), (
         "Install-Desktop must set %TEMP% to the ASCII short form for native tools"
