@@ -59,3 +59,16 @@ def test_key_resolver_copies_match():
     bundled copies must not drift apart."""
     copies = {plugin: (_BUNDLED / plugin / "_keyresolver.py").read_text(encoding="utf-8") for plugin in BIFROST_PLUGINS}
     assert len(set(copies.values())) == 1, sorted(copies)
+
+
+def test_install_keeps_the_first_run_off_the_nous_free_tier(tmp_path, monkeypatch):
+    """The first-run guide must run on the Bifrost key, never mint the geofenced Nous free tier."""
+    from hermes_cli import bifrost_edition
+    from hermes_cli.anon_auth import guest_allowed
+
+    home = tmp_path / ".hermes"
+    home.mkdir()
+    monkeypatch.setenv("HERMES_HOME", str(home))
+
+    assert bifrost_edition.main() == 0
+    assert guest_allowed() is False

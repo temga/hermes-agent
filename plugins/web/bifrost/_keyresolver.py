@@ -9,7 +9,11 @@ referenced from ``config.yaml`` via ``providers.<name>.key_env``.  The
 plugins never saw it and the SETUP.md agent ended up writing a second copy
 under ``BIFROST_API_KEY`` — two names, one value.
 
-This module is the single source of truth.  Resolution order:
+This module is the single source of truth.  Every lookup goes through
+``hermes_cli.config.get_env_value`` (profile secret scope, then the profile's
+``.env``) like the core key resolver: a served profile's key lives in its
+scope, not in ``os.environ``, so a bare ``os.environ`` read reported "key not
+set" and web search silently fell back to the keyless tier.  Resolution order:
 
 1.  ``BIFROST_API_KEY`` in the environment (explicit, still works).
 2.  ``providers.<name>.key_env`` from ``config.yaml`` — scan every provider
@@ -44,6 +48,23 @@ _CANONICAL_ENV = "BIFROST_API_KEY"
 _DEFAULT_BASE_URL_V1 = "https://router.rove-ai.ru/v1"
 
 
+def _env(name: str) -> str:
+    """Scope-aware credential read (see module docstring); ``""`` when unset."""
+    from hermes_cli.config import get_env_value
+    return get_env_value(name) or ""
+
+
+def _custom_key_names() -> set[str]:
+    """``HERMES_CUSTOM_*_API_KEY`` names visible to the current profile: its ``.env`` plus its scope
+    (or ``os.environ`` when no scope is bound — a bound scope never borrows the launch profile's env)."""
+    from agent.secret_scope import current_secret_scope
+    from hermes_cli.config import load_env
+
+    scope = current_secret_scope()
+    names = set(load_env()) | set(os.environ if scope is None else scope)
+    return {n for n in names if n.startswith("HERMES_CUSTOM_") and n.endswith("_API_KEY")}
+
+
 def _load_config() -> dict:
     """Load config.yaml without raising — plugins must never crash on config read."""
     try:
@@ -70,7 +91,7 @@ def resolve_bifrost_key() -> str:
     3. Any ``HERMES_CUSTOM_*_API_KEY`` env var whose value starts with ``sk-bf-``.
     """
     # 1 — canonical env var
-    key = os.environ.get(_CANONICAL_ENV, "")
+    key = _env(_CANONICAL_ENV)
     if key:
         return key
 
@@ -92,17 +113,14 @@ def resolve_bifrost_key() -> str:
             key_env = entry.get("key_env", "")
             if not key_env:
                 continue
-            val = os.environ.get(key_env, "")
+            val = _env(key_env)
             if val:
                 return val
 
     # 3 — scan HERMES_CUSTOM_*_API_KEY env vars for an sk-bf-* value
-    for env_name, env_val in os.environ.items():
-        if not env_name.startswith("HERMES_CUSTOM_"):
-            continue
-        if not env_name.endswith("_API_KEY"):
-            continue
-        if env_val and env_val.startswith("sk-bf-"):
+    for env_name in sorted(_custom_key_names()):
+        env_val = _env(env_name)
+        if env_val.startswith("sk-bf-"):
             return env_val
 
     return ""
@@ -117,7 +135,7 @@ def resolve_bifrost_base_url() -> str:
     3. Default ``https://router.rove-ai.ru/v1``.
     """
     # 1 — explicit env var
-    env_url = os.environ.get("BIFROST_BASE_URL", "")
+    env_url = _env("BIFROST_BASE_URL")
     if env_url:
         url = env_url.rstrip("/")
         if not url.endswith("/v1"):

@@ -53,6 +53,7 @@ function mustStoreMsix(value) {
 // never drift (see scripts/msix-shared.mjs).
 const { OUT_OF_STORE_PUBLISHER, channelBuildRequest, stageChannelManifest } = require('../../scripts/msix-shared.mjs')
 const { macIconResource } = require('./scripts/mac-icon.cjs')
+const { nearestEditionVersion } = require('./scripts/edition-bundle-version.cjs')
 const channelRequest = channelBuildRequest()
 
 /** @typedef {import("app-builder-lib").Configuration} Configuration */
@@ -286,6 +287,11 @@ module.exports = {
       : 'Native desktop shell for Hermes Agent.',
     target: ['AppImage']
   }
+}
+
+const editionVersion = channelRequest || releaseBuild ? null : nearestEditionVersion(path.join(__dirname, '..', '..'))
+if (editionVersion) {
+  Object.assign(module.exports.mac, { bundleVersion: editionVersion, bundleShortVersion: editionVersion })
 }
 
 if (channelRequest) {

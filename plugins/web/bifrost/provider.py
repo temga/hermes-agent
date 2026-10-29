@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 from typing import Any, Dict, List
 
@@ -168,10 +167,8 @@ class BifrostWebSearchProvider(WebSearchProvider):
         key = resolve_bifrost_key()
         if not key:
             return None
-        base = resolve_bifrost_base_url()
-        # Strip /v1 suffix if present — /mcp is at the gateway root
-        base = base.removesuffix("/v1")
-        return BifrostMCPClient(base, key)
+        # /mcp is at the gateway root, not under /v1
+        return BifrostMCPClient(resolve_bifrost_base_url().removesuffix("/v1"), key)
 
     def supports_search(self) -> bool:
         return True

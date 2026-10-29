@@ -26,10 +26,13 @@ from ._keyresolver import resolve_bifrost_key, resolve_bifrost_base_url
 # resolver (which reads env_vars from the profile) finds the key even when the
 # user added Bifrost as a custom provider with a different env-var name (e.g.
 # HERMES_CUSTOM_ROVE_API_KEY).  This runs at import time, before the agent init
-# reads the profile's env_vars.  The base URL is never seeded: every Bifrost
-# plugin resolves it itself, so importing this module leaves a keyless
-# environment untouched.
-if not os.environ.get("BIFROST_API_KEY"):
+# reads the profile's env_vars.  Never while multiplexing: os.environ is shared
+# by every served profile, and there is no profile scope to resolve against at
+# import.  The base URL is never seeded: every Bifrost plugin resolves it
+# itself, so importing this module leaves a keyless environment untouched.
+from agent.secret_scope import is_multiplex_active
+
+if not is_multiplex_active() and not os.environ.get("BIFROST_API_KEY"):
     _seeded = resolve_bifrost_key()
     if _seeded:
         os.environ["BIFROST_API_KEY"] = _seeded
