@@ -2602,6 +2602,8 @@ export const frOverrides = {
       pickerTitle: 'Hub de skills',
       pickerBrowse: 'Parcourir tout le hub',
       pickerHide: 'Masquer le navigateur du hub',
+      pickerBlocked:
+        'Impossible d’accéder au hub de skills, peut-être à cause de restrictions réseau ou d’un blocage géographique du CDN. Indiquez un miroir dans « skills.hub_url » de config.yaml.',
       pickerHint:
         'Cliquez sur « + Ajouter à cet agent » pour installer un skill : il apparaîtra ensuite dans la liste ci-dessus.',
       loadFailed: 'Échec du chargement du hub de skills',

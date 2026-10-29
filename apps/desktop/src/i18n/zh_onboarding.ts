@@ -17,8 +17,8 @@ export const zhOnboarding: TranslationOverrides['onboarding'] = {
   connected: '已连接',
   featuredPitch: '一个订阅，300+ 前沿模型 — 运行 Hermes 的推荐方式',
   fireworksPitch: '直接模型 API — Fireworks 托管的前沿模型',
-  routerAiPitch: 'Russian OpenAI-compatible API aggregator — 300+ models',
-  neuralDeepPitch: 'Self-hosted AI hub on Russian GPUs — 152-FZ compliant',
+  routerAiPitch: '俄罗斯的 OpenAI 兼容 API 聚合平台 — 300+ 模型，支持本地支付',
+  neuralDeepPitch: '部署在俄罗斯 GPU 上的自托管 AI 中心（符合 152-FZ）— gpt-oss、qwen、gemma',
   localModelsTitle: '本地运行模型',
   localModelsPitch: '无需账号——下载模型，在本机运行',
   openRouterPitch: '一个密钥，数百个模型 — 稳妥的默认选择',
@@ -51,6 +51,8 @@ export const zhOnboarding: TranslationOverrides['onboarding'] = {
   verifyingCode: provider => `正在通过 ${provider} 验证你的代码...`,
   connectedProvider: provider => `${provider} 已连接`,
   connectedPicking: provider => `${provider} 已连接。正在选择默认模型...`,
+  defaultModelNotSaved: (provider: string, detail: string) =>
+    `${provider} 密钥已保存，但 Hermes 无法为其设置默认模型。${detail}`.trim(),
   signInFailed: '登录失败，请重试。',
   signInExpired:
     '等待授权超时。通常是因为登录页面在打开的标签页中卡住（服务端问题）——请在该页面完成登录后重试。若仍失败，请改用 API 密钥或 CLI 方式。',

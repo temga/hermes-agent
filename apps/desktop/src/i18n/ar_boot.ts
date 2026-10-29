@@ -287,8 +287,8 @@ export const arBoot = {
     featuredPitch: 'اشتراك واحد، أكثر من 300 نموذج متقدم — الطريقة الموصى بها لتشغيل Hermes',
     fireworksPitch: 'نماذج مفتوحة سريعة مع استضافة Fireworks.',
     openRouterPitch: 'مفتاح واحد لمئات النماذج — خيار افتراضي جيد',
-    routerAiPitch: 'Russian OpenAI-compatible API aggregator — 300+ models',
-    neuralDeepPitch: 'Self-hosted AI hub on Russian GPUs — 152-FZ compliant',
+    routerAiPitch: 'مجمّع روسي لواجهات API متوافق مع OpenAI — أكثر من 300 نموذج، ودفع محلي',
+    neuralDeepPitch: 'مركز ذكاء اصطناعي مستضاف ذاتيًا على وحدات GPU روسية (متوافق مع 152-FZ) — gpt-oss وqwen وgemma',
     apiKeyOptions: {
       openrouter: {
         short: 'مفتاح واحد، نماذج كثيرة',
@@ -329,6 +329,8 @@ export const arBoot = {
     verifyingCode: provider => `جار التحقق من الرمز عبر ${provider}...`,
     connectedProvider: provider => `تم ربط ${provider}`,
     connectedPicking: provider => `تم ربط ${provider}. جار اختيار نموذج افتراضي...`,
+    defaultModelNotSaved: (provider: string, detail: string) =>
+      `تم حفظ مفتاح ${provider}، لكن تعذّر على Hermes تعيين نموذج افتراضي له. ${detail}`.trim(),
     signInFailed: 'فشل تسجيل الدخول. حاول مرة أخرى.',
     signInExpired:
       'انتهت مهلة انتظار التفويض. السبب الأكثر شيوعًا هو تعطّل صفحة تسجيل الدخول في تبويب المتصفح (مشكلة من جهة الخادم) — أكمل تسجيل الدخول هناك ثم أعد المحاولة. إذا استمر الفشل، استخدم مفتاح API أو واجهة سطر الأوامر بدلاً من ذلك.',

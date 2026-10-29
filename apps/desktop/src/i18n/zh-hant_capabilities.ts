@@ -28,6 +28,8 @@ export const zhHantCapabilities = {
       installStarted: name => `正在安裝「${name}」…`,
       pickerBrowse: '瀏覽完整技能中心',
       pickerHide: '隱藏技能中心瀏覽器',
+      pickerBlocked:
+        '無法連線到技能中心。可能是網路限制或 CDN 地區封鎖所致。請在 config.yaml 的「skills.hub_url」設定鏡像位址。',
       pickerHint: '按下任一技能的「+ Add to this Agent」，即可安裝並顯示在上方清單中。'
     },
     tabSkills: '技能',

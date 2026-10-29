@@ -1327,6 +1327,8 @@ export const jaOverrides = {
       installStarted: name => `「${name}」をインストール中…`,
       pickerBrowse: 'ハブ全体を見る',
       pickerHide: 'ハブのブラウザーを隠す',
+      pickerBlocked:
+        'スキルハブに接続できません。ネットワーク制限や CDN の地域ブロックが原因の可能性があります。config.yaml の「skills.hub_url」にミラーを設定してください。',
       pickerHint: 'スキルの「+ Add to this Agent」を押すと、インストールされて上の一覧に表示されます。'
     },
     tabSkills: 'スキル',

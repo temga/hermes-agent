@@ -300,8 +300,8 @@ export const zhHantBoot = {
     localModelsTitle: '本地執行模型',
     localModelsPitch: '無需帳號——下載模型，在本機執行',
     openRouterPitch: '一個金鑰，數百個模型 — 穩定的預設選擇',
-    routerAiPitch: 'Russian OpenAI-compatible API aggregator — 300+ models',
-    neuralDeepPitch: 'Self-hosted AI hub on Russian GPUs — 152-FZ compliant',
+    routerAiPitch: '俄羅斯的 OpenAI 相容 API 聚合平台 — 300+ 模型，支援本地付款',
+    neuralDeepPitch: '部署在俄羅斯 GPU 上的自架 AI 中心（符合 152-FZ）— gpt-oss、qwen、gemma',
     apiKeyOptions: {
       fireworks: { short: '直接模型 API', description: '直接存取 Fireworks AI 託管的模型。' },
       openrouter: { short: '一個金鑰，多個模型', description: '用一個金鑰存取數百個模型。適合新安裝的預設選擇。' },
@@ -329,6 +329,8 @@ export const zhHantBoot = {
     verifyingCode: provider => `正在透過 ${provider} 驗證您的代碼...`,
     connectedProvider: provider => `${provider} 已連線`,
     connectedPicking: provider => `${provider} 已連線。正在選擇預設模型...`,
+    defaultModelNotSaved: (provider: string, detail: string) =>
+      `${provider} 金鑰已儲存，但 Hermes 無法為其設定預設模型。${detail}`.trim(),
     signInFailed: '登入失敗，請重試。',
     signInExpired:
       '等待授權逾時。通常是因為登入頁面在開啟的分頁中卡住（伺服器端問題）——請在該頁面完成登入後重試。若仍失敗，請改用 API 金鑰或 CLI 方式。',

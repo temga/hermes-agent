@@ -17,8 +17,8 @@ export const jaOnboarding: TranslationOverrides['onboarding'] = {
   connected: '接続済み',
   featuredPitch: '1 つのサブスクリプションで 300 以上の最先端モデル — Hermes を実行するための推奨方法',
   fireworksPitch: '直接モデル API — Fireworks がホストする最先端モデル',
-  routerAiPitch: 'Russian OpenAI-compatible API aggregator — 300+ models',
-  neuralDeepPitch: 'Self-hosted AI hub on Russian GPUs — 152-FZ compliant',
+  routerAiPitch: 'ロシアの OpenAI 互換 API アグリゲーター — 300 以上のモデル、現地決済',
+  neuralDeepPitch: 'ロシアの GPU 上のセルフホスト AI ハブ（152-FZ 準拠） — gpt-oss、qwen、gemma',
   localModelsTitle: 'モデルをローカルで実行',
   localModelsPitch: 'アカウント不要——モデルをダウンロードしてこのマシンで実行',
   openRouterPitch: '1 つのキーで数百のモデル — 堅実なデフォルト',
@@ -56,6 +56,8 @@ export const jaOnboarding: TranslationOverrides['onboarding'] = {
   verifyingCode: provider => `${provider} でコードを確認中...`,
   connectedProvider: provider => `${provider} が接続されました`,
   connectedPicking: provider => `${provider} が接続されました。デフォルトモデルを選択中...`,
+  defaultModelNotSaved: (provider: string, detail: string) =>
+    `${provider} のキーは保存されましたが、既定のモデルを設定できませんでした。${detail}`.trim(),
   signInFailed: 'サインインに失敗しました。再試行してください。',
   signInExpired:
     '承認待ちでタイムアウトしました。多くの場合、開いたタブのサインインページが止まっている（サーバー側の問題）ためです。そのページでサインインを完了してから再試行してください。解決しない場合は API キーまたは CLI を利用してください。',

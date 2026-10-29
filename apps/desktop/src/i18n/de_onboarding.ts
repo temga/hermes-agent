@@ -21,6 +21,8 @@ export const deOnboarding: TranslationOverrides['onboarding'] = {
   fireworksPitch: 'Direkte Model-API – Fireworks-gehostete Frontier-Modelle',
   localModelsTitle: 'Modelle lokal ausführen',
   localModelsPitch: 'Kein Konto nötig – laden Sie ein Modell herunter und führen Sie es auf diesem Rechner aus',
+  routerAiPitch: 'Russischer OpenAI-kompatibler API-Aggregator – über 300 Modelle, Zahlung in Rubel',
+  neuralDeepPitch: 'Selbst gehosteter KI-Hub auf russischen GPUs (konform mit 152-FZ) – gpt-oss, qwen, gemma',
   openRouterPitch: 'Ein Key, hunderte Modelle – ein solider Standard',
   apiKeyOptions: {
     fireworks: {
@@ -98,5 +100,7 @@ export const deOnboarding: TranslationOverrides['onboarding'] = {
   price: (input, output) => `${input} rein / ${output} raus pro Mtok`,
   change: 'Ändern',
   startChatting: 'Loslegen',
-  docs: provider => `${provider}-Doku`
+  docs: provider => `${provider}-Doku`,
+  chooseLanguageTitle: 'Sprache auswählen',
+  chooseLanguageDesc: 'Sie können sie später in den Einstellungen ändern.'
 }

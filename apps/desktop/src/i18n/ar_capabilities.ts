@@ -31,6 +31,10 @@ export const arCapabilities = {
         loadFailed: (name: string) => `تعذّر تحميل المجلدات المشتركة مع ${name}.`
       }
     },
+    hub: {
+      pickerBlocked:
+        'تعذّر الوصول إلى مركز المهارات، وقد يكون السبب قيود الشبكة أو الحظر الجغرافي لشبكة CDN. حدّد مرآة في «skills.hub_url» ضمن config.yaml.'
+    },
     tabSkills: 'المهارات',
     tabToolsets: 'مجموعات الأدوات',
     all: 'الكل',

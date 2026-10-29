@@ -20,6 +20,8 @@ export const frOnboarding: TranslationOverrides['onboarding'] = {
   fireworksPitch: 'API de modèles directe — modèles de pointe hébergés par Fireworks',
   localModelsTitle: 'Exécuter des modèles en local',
   localModelsPitch: 'Aucun compte requis — téléchargez un modèle et exécutez-le sur cette machine',
+  routerAiPitch: 'Agrégateur russe d’API compatible OpenAI — plus de 300 modèles, paiements locaux',
+  neuralDeepPitch: 'Hub d’IA auto-hébergé sur des GPU russes (conforme à la loi 152-FZ) — gpt-oss, qwen, gemma',
   openRouterPitch: 'Une clé, des centaines de modèles — une valeur par défaut solide',
   apiKeyOptions: {
     fireworks: {
@@ -98,5 +100,7 @@ export const frOnboarding: TranslationOverrides['onboarding'] = {
   price: (input, output) => `${input} entrant / ${output} sortant par Mtok`,
   change: 'Modifier',
   startChatting: 'Commencer',
-  docs: provider => `Documentation ${provider}`
+  docs: provider => `Documentation ${provider}`,
+  chooseLanguageTitle: 'Choisissez votre langue',
+  chooseLanguageDesc: 'Vous pourrez la modifier plus tard dans les Réglages.'
 }
