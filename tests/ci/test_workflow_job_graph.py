@@ -56,6 +56,12 @@ def test_jobs_only_read_declared_dependencies():
     assert not violations, "workflow job graph:\n" + "\n".join(violations)
 
 
+_EDITION_RELEASE_TAGS = {
+    "desktop-setup-tauri-bifrost.yml": {"tags": ["v*-bifrost.*", "v*-bifrost-setup.*"]},
+    "desktop-setup-tauri-ru.yml": {"tags": ["v*-ru-setup.*"]},
+}
+
+
 def test_no_workflow_runs_from_a_tag_push():
     violations = []
     for filename, workflow in _loaded().items():
@@ -65,6 +71,9 @@ def test_no_workflow_runs_from_a_tag_push():
         push = triggers["push"]
         # This nightly canary also gates releases with dedicated spend-capped keys.
         if filename == "live-providers.yml" and push == {"tags": ["v*"]}:
+            continue
+        # Bifrost edition: a release tag is what builds and publishes the setup installers.
+        if push == _EDITION_RELEASE_TAGS.get(filename):
             continue
         if not isinstance(push, dict) or not ({"branches", "branches-ignore"} & set(push)) or {"tags", "tags-ignore"} & set(push):
             violations.append(filename)
