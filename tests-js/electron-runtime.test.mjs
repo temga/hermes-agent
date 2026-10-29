@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -80,4 +81,55 @@ test('refuses a foreign installed version before running its installer', () => {
   json(join(packageRoot, 'package.json'), { version: '41.10.6' })
   expect(() => prepareElectronRuntime({ source })).toThrow(/lock-pinned/)
   expect(existsSync(join(packageRoot, 'installer-calls'))).toBe(false)
+})
+
+// install.js that can only take the archive from @electron/get's cache, like a host whose Node
+// downloader drops the connection; a stand-in @electron/get and a curl on PATH that writes `payload`.
+function offlineFixture(payload, checksum) {
+  const fx = fixture()
+  const get = join(fx.packageRoot, 'node_modules/@electron/get')
+  json(join(get, 'package.json'), { name: '@electron/get', type: 'module', exports: './dist/index.js' })
+  mkdirSync(join(get, 'dist'))
+  writeFileSync(join(get, 'dist/index.js'), 'export {}\n')
+  writeFileSync(join(get, 'dist/artifact-utils.js'), `
+    export const getArtifactFileName = d => \`\${d.artifactName}-\${d.version}-\${d.platform}-\${d.arch}.zip\`
+    export const getArtifactRemoteURL = async d => \`https://example.invalid/\${d.version}/\${getArtifactFileName(d)}\`
+  `)
+  writeFileSync(join(get, 'dist/Cache.js'), `
+    import { join } from 'node:path'
+    export class Cache { constructor(root) { this.root = root } getCachePath(url, file) { return join(this.root, 'key', file) } }
+  `)
+  const file = `electron-v42.11.12-${process.platform}-${process.arch}.zip`
+  json(join(fx.packageRoot, 'checksums.json'), { [file]: checksum })
+  const cache = join(fx.source, 'electron cache')
+  const installer = readFileSync(join(fx.packageRoot, 'install.js'), 'utf8')
+  writeFileSync(join(fx.packageRoot, 'install.js'), `
+    const cached = require('node:path').join(process.env.electron_config_cache, 'key', ${JSON.stringify(file)});
+    if (!require('node:fs').existsSync(cached)) {
+      require('node:fs').appendFileSync(require('node:path').join(__dirname, 'installer-calls'), 'terminated\\n');
+      process.exit(1);
+    }
+    ${installer}
+  `)
+  const bin = join(fx.source, 'bin')
+  mkdirSync(bin)
+  writeFileSync(join(bin, 'curl'), `#!/bin/sh\nwhile [ "$1" != "-o" ]; do shift; done\nprintf '%s' ${JSON.stringify(payload)} > "$2"\n`, { mode: 0o755 })
+  const env = { ...process.env, electron_config_cache: cache, PATH: `${bin}:${process.env.PATH}` }
+  return { ...fx, env, archive: join(cache, 'key', file) }
+}
+
+const sha256 = text => createHash('sha256').update(text).digest('hex')
+
+test.skipIf(process.platform === 'win32')('takes the archive with curl when the installer keeps failing, verified by checksum', () => {
+  const { source, packageRoot, executable, env, archive } = offlineFixture('archive bytes', sha256('archive bytes'))
+  expect(prepareElectronRuntime({ source, env })).toBe(executable)
+  expect(readFileSync(archive, 'utf8')).toBe('archive bytes')
+  expect(readFileSync(join(packageRoot, 'installer-calls'), 'utf8')).toBe('terminated\n'.repeat(3) + 'install\n')
+})
+
+test.skipIf(process.platform === 'win32')('keeps the installer failure when the curl archive does not match its checksum', () => {
+  const { source, env, archive } = offlineFixture('tampered bytes', sha256('archive bytes'))
+  expect(() => prepareElectronRuntime({ source, env })).toThrow()
+  expect(existsSync(archive)).toBe(false)
+  expect(existsSync(`${archive}.partial`)).toBe(false)
 })

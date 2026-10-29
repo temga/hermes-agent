@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process'
-import { copyFileSync, existsSync, readFileSync, statSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -51,9 +52,71 @@ export function prepareElectronRuntime({ source, install = true, env = process.e
     copyFileSync(env.HERMES_VC_RUNTIME, join(binding, 'vcruntime140.dll'))
   }
   console.log(`electron-runtime: preparing locked Electron ${version} (${process.platform}-${process.arch})...`)
-  execFileSync(process.execPath, [join(packageRoot, 'install.js')], { cwd: source, env: installerEnv, stdio: 'inherit' })
+  const runInstaller = () =>
+    execFileSync(process.execPath, [join(packageRoot, 'install.js')], { cwd: source, env: installerEnv, stdio: 'inherit' })
+  let failure
+  for (let attempt = 1; attempt <= INSTALLER_ATTEMPTS; attempt++) {
+    try {
+      runInstaller()
+      failure = undefined
+      break
+    } catch (error) {
+      failure = error
+      console.log(`electron-runtime: installer attempt ${attempt}/${INSTALLER_ATTEMPTS} failed`)
+    }
+  }
+  if (failure) {
+    try {
+      seedArchiveWithCurl(packageRoot, version, installerEnv)
+    } catch (error) {
+      console.log(`electron-runtime: curl fallback unavailable: ${error.message}`)
+      throw failure
+    }
+    runInstaller()
+  }
   if (!prepared()) throw new Error('Electron installer did not produce the prepared host runtime')
   return executable
+}
+
+// Node's downloader (install.js -> @electron/get) drops long GitHub downloads on some networks
+// ("TypeError: terminated") where curl completes, which left updates owing the desktop build.
+const INSTALLER_ATTEMPTS = 3
+
+// @electron/get's own URL (mirror env included) and cache path for this host's archive, asked of
+// the copy install.js runs, in the installer's environment.
+const ARCHIVE_LOCATION = `
+const [dist, version, platform, arch] = process.argv.slice(1)
+const { pathToFileURL } = await import('node:url')
+const { join } = await import('node:path')
+const { getArtifactFileName, getArtifactRemoteURL } = await import(pathToFileURL(join(dist, 'artifact-utils.js')).href)
+const { Cache } = await import(pathToFileURL(join(dist, 'Cache.js')).href)
+const details = { version, artifactName: 'electron', platform, arch }
+const url = await getArtifactRemoteURL(details)
+const fileName = getArtifactFileName(details)
+console.log(JSON.stringify({ url, fileName, path: new Cache(process.env.electron_config_cache || undefined).getCachePath(url, fileName) }))
+`
+
+/** Download the host archive with curl into @electron/get's cache, verified against the electron
+ *  package's checksums.json (the list install.js checks), so the next install.js run unpacks it. */
+function seedArchiveWithCurl(packageRoot, version, env) {
+  const checksums = JSON.parse(readFileSync(join(packageRoot, 'checksums.json'), 'utf8'))
+  const dist = dirname(createRequire(join(packageRoot, 'package.json')).resolve('@electron/get'))
+  const { url, fileName, path } = JSON.parse(execFileSync(process.execPath,
+    ['--input-type=module', '-e', ARCHIVE_LOCATION, dist, `v${version}`, process.platform, process.arch],
+    { env, encoding: 'utf8' }))
+  const expected = checksums[fileName]
+  if (!expected) throw new Error(`no checksum for ${fileName}`)
+  const partial = `${path}.partial`
+  mkdirSync(dirname(path), { recursive: true })
+  console.log(`electron-runtime: downloading ${fileName} with curl...`)
+  execFileSync('curl', ['-fL', '--retry', '5', '--retry-all-errors', '--connect-timeout', '30', '-o', partial, url],
+    { env, stdio: 'inherit' })
+  const actual = createHash('sha256').update(readFileSync(partial)).digest('hex')
+  if (actual !== expected) {
+    rmSync(partial, { force: true })
+    throw new Error(`${fileName} checksum mismatch`)
+  }
+  renameSync(partial, path)
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
