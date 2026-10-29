@@ -23,7 +23,7 @@ import type { GatewayRequester } from '@/lib/yolo-session'
 import { ackFreeTierNotice } from './free-tier'
 import { activeGatewayConnectionId } from './gateway'
 import { $gatewayReadyAt } from './live-sync'
-import { clearFreeTierIntro } from './onboarding'
+import { $desktopOnboarding, clearFreeTierIntro } from './onboarding'
 import { $decideExit } from './onboarding-intro'
 import { $onboardingPhase } from './onboarding-phase'
 import { markOnboardingDecided, ONBOARDING_DECIDE_OFFER_MS, setOnboardingSurfaceActive } from './onboarding-presence'
@@ -259,6 +259,8 @@ async function readAndStart(
 
     if (!released && state.run && state.eligible) {
       await startOnboarding(request, resume, { ...options, freshLaunch: true })
+    } else if (!released && state.run) {
+      startOnceConfigured(request, resume, options)
     }
   } catch (error) {
     console.warn('[onboarding] state could not be read', error)
@@ -266,6 +268,18 @@ async function readAndStart(
     disarm()
     markOnboardingDecided()
   }
+}
+
+/** Due, but nothing could carry the chat at launch: no welcome trial and no provider (an edition that
+ *  turns the trial off). The run stays due on the backend; it starts once the user connects a provider
+ *  instead of on the next launch. */
+function startOnceConfigured(request: OnboardingRequest, resume: OnboardingResume, options?: StartOptions): void {
+  const stop = $desktopOnboarding.listen(({ configured }) => {
+    if (configured === true) {
+      stop()
+      void readAndStart(request, resume, options)
+    }
+  })
 }
 
 /** The due check's way out, armed like the intro's (`kickoff.ts`): `ONBOARDING_DECIDE_OFFER_MS` after
