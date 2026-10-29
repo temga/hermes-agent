@@ -25,15 +25,14 @@ from typing import Any, Dict, List, Optional
 
 from agent.transcription_provider import TranscriptionProvider
 
-from ._keyresolver import resolve_bifrost_key
+from ._keyresolver import resolve_bifrost_base_url, resolve_bifrost_key
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_BASE_URL = "https://router.rove-ai.ru/v1"
 _DEFAULT_MODEL = "neuraldeep/whisper-podlodka-turbo"
 
 # Models exposed by Bifrost's NeuralDeep upstream.
-_MODELS: List[Dict[str, Any]] = [
+_MODELS: list[dict[str, Any]] = [
     {
         "id": "neuraldeep/whisper-podlodka-turbo",
         "display": "Whisper Podlodka Turbo (Russian-tuned)",
@@ -66,13 +65,13 @@ class BifrostSTTProvider(TranscriptionProvider):
     def is_available(self) -> bool:
         return bool(resolve_bifrost_key())
 
-    def list_models(self) -> List[Dict[str, Any]]:
+    def list_models(self) -> list[dict[str, Any]]:
         return list(_MODELS)
 
     def default_model(self) -> Optional[str]:
         return _DEFAULT_MODEL
 
-    def get_setup_schema(self) -> Dict[str, Any]:
+    def get_setup_schema(self) -> dict[str, Any]:
         return {
             "name": "Bifrost STT",
             "badge": "paid",
@@ -93,7 +92,7 @@ class BifrostSTTProvider(TranscriptionProvider):
         model: Optional[str] = None,
         language: Optional[str] = None,
         **extra: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Transcribe via ``POST /v1/audio/transcriptions`` on Bifrost."""
         api_key = resolve_bifrost_key()
         if not api_key:
@@ -104,10 +103,7 @@ class BifrostSTTProvider(TranscriptionProvider):
                 "provider": self.name,
             }
 
-        base_url = (
-            os.environ.get("BIFROST_BASE_URL", "").rstrip("/")
-            or _DEFAULT_BASE_URL
-        )
+        base_url = resolve_bifrost_base_url()
         model_name = model or _DEFAULT_MODEL
 
         try:
@@ -151,7 +147,7 @@ class BifrostSTTProvider(TranscriptionProvider):
                 f'filename="{filename}"\r\n'
                 f"Content-Type: {mime}\r\n\r\n"
             )
-            body = "".join(body_parts).encode("utf-8") + audio_bytes + f"\r\n--{boundary}--\r\n".encode("utf-8")
+            body = "".join(body_parts).encode("utf-8") + audio_bytes + f"\r\n--{boundary}--\r\n".encode()
 
             url = f"{base_url}/audio/transcriptions"
             req = urllib.request.Request(

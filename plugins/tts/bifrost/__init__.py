@@ -29,17 +29,16 @@ from typing import Any, Dict, List, Optional
 
 from agent.tts_provider import TTSProvider, DEFAULT_OUTPUT_FORMAT
 
-from ._keyresolver import resolve_bifrost_key
+from ._keyresolver import resolve_bifrost_base_url, resolve_bifrost_key
 
 logger = logging.getLogger(__name__)
 
-_API_BASE = os.environ.get("BIFROST_BASE_URL", "https://router.rove-ai.ru").rstrip("/").removesuffix("/v1") + "/v1"
 _DEFAULT_MODEL = "espeech-tts"
 _DEFAULT_VOICE = "alloy"
 _DEFAULT_LANGUAGE = "Russian"
 
 # NeuralDeep: 8 голосов (qwen3-tts — мультиязык, 10 языков).
-_VOICES: List[Dict[str, Any]] = [
+_VOICES: list[dict[str, Any]] = [
     {"id": "alloy",   "display": "Alloy — нейтральный",     "language": "multi"},
     {"id": "echo",    "display": "Echo — мужской",          "language": "multi"},
     {"id": "fable",   "display": "Fable — рассказчик",      "language": "multi"},
@@ -50,7 +49,7 @@ _VOICES: List[Dict[str, Any]] = [
     {"id": "sage",    "display": "Sage — спокойный",        "language": "multi"},
 ]
 
-_MODELS: List[Dict[str, Any]] = [
+_MODELS: list[dict[str, Any]] = [
     {
         "id": "espeech-tts",
         "display": "ESpeech TTS — русский с ударениями (F5 + RUAccent)",
@@ -80,19 +79,19 @@ class BifrostTTSProvider(TTSProvider):
     def is_available(self) -> bool:
         return bool(resolve_bifrost_key())
 
-    def list_models(self) -> List[Dict[str, Any]]:
+    def list_models(self) -> list[dict[str, Any]]:
         return list(_MODELS)
 
     def default_model(self) -> Optional[str]:
         return _DEFAULT_MODEL
 
-    def list_voices(self) -> List[Dict[str, Any]]:
+    def list_voices(self) -> list[dict[str, Any]]:
         return list(_VOICES)
 
     def default_voice(self) -> Optional[str]:
         return _DEFAULT_VOICE
 
-    def get_setup_schema(self) -> Dict[str, Any]:
+    def get_setup_schema(self) -> dict[str, Any]:
         return {
             "name": "Bifrost TTS",
             "badge": "paid",
@@ -134,7 +133,7 @@ class BifrostTTSProvider(TTSProvider):
         bifrost_model = f"neuraldeep/{model_name}" if "/" not in model_name else model_name
 
         # Формируем request body (OpenAI-схема + language для прокси)
-        body: Dict[str, Any] = {
+        body: dict[str, Any] = {
             "model": bifrost_model,
             "input": text,
             "voice": voice_name,
@@ -148,7 +147,7 @@ class BifrostTTSProvider(TTSProvider):
         import urllib.error
         import json as _json
 
-        url = f"{_API_BASE}/audio/speech"
+        url = f"{resolve_bifrost_base_url()}/audio/speech"
         req = urllib.request.Request(
             url,
             data=_json.dumps(body).encode("utf-8"),

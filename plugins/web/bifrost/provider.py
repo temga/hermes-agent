@@ -24,11 +24,9 @@ import requests
 
 from agent.web_search_provider import WebSearchProvider
 
-from ._keyresolver import resolve_bifrost_key
+from ._keyresolver import resolve_bifrost_base_url, resolve_bifrost_key
 
 logger = logging.getLogger(__name__)
-
-_DEFAULT_BASE_URL = "https://router.rove-ai.ru"
 
 # MCP protocol version we speak
 _MCP_PROTOCOL = "2024-11-05"
@@ -170,10 +168,9 @@ class BifrostWebSearchProvider(WebSearchProvider):
         key = resolve_bifrost_key()
         if not key:
             return None
-        base = os.environ.get("BIFROST_BASE_URL", _DEFAULT_BASE_URL)
+        base = resolve_bifrost_base_url()
         # Strip /v1 suffix if present — /mcp is at the gateway root
-        if base.endswith("/v1"):
-            base = base[:-3]
+        base = base.removesuffix("/v1")
         return BifrostMCPClient(base, key)
 
     def supports_search(self) -> bool:
@@ -182,7 +179,7 @@ class BifrostWebSearchProvider(WebSearchProvider):
     def supports_extract(self) -> bool:
         return True
 
-    def search(self, query: str, limit: int = 5, **kwargs) -> Dict[str, Any]:
+    def search(self, query: str, limit: int = 5, **kwargs) -> dict[str, Any]:
         """Search the web via Bifrost MCP (web_search + tg_search tools).
 
         Returns {"success": True, "data": {"web": [{title, url, description, position}, ...]}}.
@@ -192,7 +189,7 @@ class BifrostWebSearchProvider(WebSearchProvider):
             logger.warning("Bifrost key not set — Bifrost search unavailable")
             return {"success": False, "error": "Bifrost key not set"}
 
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
         lang = kwargs.get("lang", "ru")
 
         # Web search
@@ -237,7 +234,7 @@ class BifrostWebSearchProvider(WebSearchProvider):
             "data": {"web": unique[:limit]},
         }
 
-    def extract(self, urls: List[str], char_limit: int = 15000, **kwargs) -> List[Dict[str, Any]]:
+    def extract(self, urls: list[str], char_limit: int = 15000, **kwargs) -> list[dict[str, Any]]:
         """Extract/crawl content from URLs via Bifrost MCP (crawl tool).
 
         Returns [{url, title, content, error?}, ...].
@@ -246,7 +243,7 @@ class BifrostWebSearchProvider(WebSearchProvider):
         if not client:
             return [{"url": u, "error": "Bifrost key not set"} for u in urls]
 
-        out: List[Dict[str, Any]] = []
+        out: list[dict[str, Any]] = []
         for url in urls:
             try:
                 resp = client.call_tool("crawl", {
@@ -271,7 +268,7 @@ class BifrostWebSearchProvider(WebSearchProvider):
 # Parsing helpers
 # ---------------------------------------------------------------------------
 
-def _parse_search_results(text: str) -> List[Dict[str, Any]]:
+def _parse_search_results(text: str) -> list[dict[str, Any]]:
     """Parse search results from MCP text output.
 
     NeuralDeep search returns JSON or formatted text. We try JSON first,

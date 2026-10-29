@@ -39,7 +39,7 @@ from agent.image_gen_provider import (
     success_response,
 )
 
-from ._keyresolver import resolve_bifrost_key
+from ._keyresolver import resolve_bifrost_base_url, resolve_bifrost_key
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +48,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 DEFAULT_MODEL = "routerai/openai/gpt-image-2"
-
-_DEFAULT_BASE_URL = "https://router.rove-ai.ru"
 
 # Aspect ratio → OpenAI image API size mapping.
 # Bifrost passes these through to the upstream provider (routerai).
@@ -62,7 +60,7 @@ _ASPECT_TO_SIZE = {
 # Curated model catalog — Bifrost requires provider prefix (routerai/)
 # for image models. The gateway proxies to routerai which offers 38+ models.
 # Users can set any model id in config.yaml as long as it has the routerai/ prefix.
-_MODELS: Dict[str, Dict[str, Any]] = {
+_MODELS: dict[str, dict[str, Any]] = {
     "routerai/openai/gpt-image-2": {
         "display": "GPT Image 2",
         "speed": "~15s",
@@ -136,12 +134,9 @@ class BifrostImageGenProvider(ImageGenProvider):
     def _resolve_base_url(self) -> str:
         """Resolve gateway base URL from env or config."""
         # BIFROST_BASE_URL may include /v1 or not — strip it for image endpoint
-        url = os.environ.get("BIFROST_BASE_URL", "")
-        if not url:
-            url = _DEFAULT_BASE_URL
-        # Strip trailing /v1 if present (we add it in the request path)
-        if url.endswith("/v1"):
-            url = url[:-3]
+        url = resolve_bifrost_base_url()
+        # Strip trailing /v1 (we add it in the request path)
+        url = url.removesuffix("/v1")
         return url.rstrip("/")
 
     def _resolve_model(self, model: str | None) -> str:
@@ -182,7 +177,7 @@ class BifrostImageGenProvider(ImageGenProvider):
         size = _ASPECT_TO_SIZE.get(ar, _ASPECT_TO_SIZE["square"])
 
         # Build request body — OpenAI-compatible
-        body: Dict[str, Any] = {
+        body: dict[str, Any] = {
             "model": resolved_model,
             "prompt": prompt,
             "n": 1,
