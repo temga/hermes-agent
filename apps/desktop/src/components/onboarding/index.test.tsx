@@ -53,7 +53,9 @@ describe('onboarding Picker', () => {
     render(<Picker ctx={ctx} />)
 
     expect(screen.getByText('Nous Portal')).toBeTruthy()
-    expect(screen.getByText('Recommended')).toBeTruthy()
+    // Bifrost edition: the Bifrost Gateway row leads and is recommended too.
+    expect(screen.getByText('Bifrost Gateway')).toBeTruthy()
+    expect(screen.getAllByText('Recommended')).toHaveLength(2)
     // Fireworks stays behind the disclosure with the other alternatives; only
     // Nous Portal is visible before the user expands the list.
     expect(screen.queryByText('Fireworks AI')).toBeNull()
@@ -77,7 +79,8 @@ describe('onboarding Picker', () => {
     expect(screen.getByText('Anthropic Account')).toBeTruthy()
     expect(screen.getByText('ChatGPT or Codex Subscription')).toBeTruthy()
     expect(screen.queryByText('Other sign-in options')).toBeNull()
-    expect(screen.queryByText('Recommended')).toBeNull()
+    // Only the always-shown Bifrost Gateway row carries the badge without Nous Portal.
+    expect(screen.getByText('Recommended').closest('button')?.textContent).toContain('Bifrost Gateway')
   })
 
   it('offers "choose later" on first run and persists the skip', () => {
