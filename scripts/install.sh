@@ -141,6 +141,8 @@ error_line() {
 # unreported when collection is off. Best effort: never fails the install.
 write_install_receipt() {
     # $1 outcome, $2 failed stage, $3 failure class. One file per run: the first writer wins.
+    # Edition-only stages (shared_metrics_contract.INSTALL_RUN_EDITION_STAGES) are reported as other.
+    [ "$2" != bifrost_plugins ] || set -- "$1" other "$3"
     # A failed write (full disk) removes its partial temp file: the reader never sees dotfiles.
     {
         local dir="$HERMES_HOME/telemetry/shared_metrics/pending_installs" id="$INSTALL_RUN_ID"

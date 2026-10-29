@@ -836,6 +836,8 @@ function Write-InstallReceipt([string]$Outcome, [string]$FailedStage, [string]$C
     if ($script:InstallReceiptWritten) { return }
     $script:InstallReceiptWritten = $true
     $tmp = $null  # never a caller's $tmp (dynamic scope) in the catch below
+    # Edition-only stages (shared_metrics_contract.INSTALL_RUN_EDITION_STAGES) are reported as other.
+    if (($FailedStage -replace '-', '_') -eq "bifrost_plugins") { $FailedStage = "other" }
     try {
         $dir = Join-Path $HermesHome "telemetry\shared_metrics\pending_installs"
         New-Item -ItemType Directory -Force -Path $dir | Out-Null

@@ -90,9 +90,11 @@ def test_schema_and_installers_match_the_contract_exactly():
     used = {c for c in sh_sites + ps1_sites if not c.startswith("$")} | {"setup_failed", "gateway_failed"}
     assert used | {"interrupted", "none", "other"} == contract.INSTALL_RUN_FAILURE_CLASSES
     stage_names = re.search(r"stage_names\(\) \{\n\s+printf '%s\\n' ([a-z -]+)\n", sh).group(1).split()
-    assert {s.replace("-", "_") for s in stage_names} == contract.INSTALL_RUN_STAGES
+    ladder = contract.INSTALL_RUN_STAGES | contract.INSTALL_RUN_EDITION_STAGES
+    assert {s.replace("-", "_") for s in stage_names} == ladder
     ps1_stages = re.findall(r'@\{ name = "([a-z-]+)"', ps1)
-    assert {s.replace("-", "_") for s in ps1_stages} == contract.INSTALL_RUN_STAGES
+    assert {s.replace("-", "_") for s in ps1_stages} == ladder
+    assert not contract.INSTALL_RUN_EDITION_STAGES & contract.INSTALL_RUN_FAILED_STAGES
 
 
 def test_receipt_is_reported_once_out_of_contract_ones_dropped(marks):

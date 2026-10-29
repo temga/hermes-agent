@@ -552,6 +552,9 @@ INSTALL_RUN_OUTCOMES = frozenset({"failed", "success"})
 INSTALL_RUN_STAGES = frozenset({
     "complete", "config", "gateway", "prerequisites", "products", "python_deps", "repository", "setup", "venv",
 })
+# Bifrost edition: ladder stages the shared schema does not know. The installers report a failure
+# there as `other`, so a fork install never sends a stage value outside the upstream contract.
+INSTALL_RUN_EDITION_STAGES = frozenset({"bifrost_plugins"})
 INSTALL_RUN_FAILED_STAGES = INSTALL_RUN_STAGES | {"none", "other"}
 # The code each installer fail()/Fail call site passes; `none` on success.
 INSTALL_RUN_FAILURE_CLASSES = frozenset({
