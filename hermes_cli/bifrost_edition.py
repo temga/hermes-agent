@@ -68,13 +68,9 @@ def remove_legacy_copies_all_profiles() -> list[str]:
 def configure(cfg: dict) -> dict:
     """Route every service through Bifrost (mutates and returns ``cfg``)."""
     # No `plugins.enabled` entries: bundled backends and model providers load without them.
-
-    # base_url MUST be the Bifrost gateway: _keyresolver.py only resolves the key when the host is
-    # router.rove-ai.ru, so the template's openrouter.ai URL 403s at runtime.
-    model = cfg.get("model")
-    if not isinstance(model, dict):  # the bare-string form (`model: name`) is replaced below anyway
-        model = cfg["model"] = {}
-    model.update(provider="bifrost", default="turbocloud/GLM-5.2", base_url="https://router.rove-ai.ru/v1")
+    # The model is left alone: a pinned provider marks the install as used, so the first-run guide
+    # would never run. Saving the Bifrost key pins provider, gateway URL and the first model the
+    # key can reach.
     cfg.setdefault("image_gen", {})["provider"] = "bifrost"
     cfg.setdefault("web", {}).update(search_backend="bifrost", extract_backend="bifrost")
     stt = cfg.setdefault("stt", {})

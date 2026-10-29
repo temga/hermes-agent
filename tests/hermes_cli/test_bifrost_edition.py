@@ -6,9 +6,7 @@ _BUNDLED = Path(__file__).resolve().parents[2] / "plugins"
 
 
 def test_configure_routes_services_through_bifrost():
-    cfg = configure({"model": {"provider": "openrouter", "base_url": "https://openrouter.ai/api/v1"}})
-    assert cfg["model"]["provider"] == "bifrost"
-    assert cfg["model"]["base_url"] == "https://router.rove-ai.ru/v1"
+    cfg = configure({})
     assert cfg["web"] == {"search_backend": "bifrost", "extract_backend": "bifrost"}
     assert cfg["stt"]["bifrost"]["language"] == "ru"
     assert cfg["skills"]["hub_url"] == "https://hub.rove-ai.ru"
@@ -72,3 +70,23 @@ def test_install_keeps_the_first_run_off_the_nous_free_tier(tmp_path, monkeypatc
 
     assert bifrost_edition.main() == 0
     assert guest_allowed() is False
+
+
+def test_install_still_reads_as_a_first_install(tmp_path, monkeypatch):
+    """Desktop first-run onboarding runs only on a fresh install (``install_state.probe``). The
+    installer's config stage and this edition step run before the first launch, so together they
+    must not leave evidence of use (a pinned model provider is such evidence)."""
+    import shutil
+
+    from hermes_cli import bifrost_edition, install_state
+
+    home = tmp_path / ".hermes"
+    home.mkdir()
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    root = _BUNDLED.parent
+    shutil.copy(root / "cli-config.yaml.example", home / "config.yaml")
+    shutil.copy(root / ".env.example", home / ".env")
+
+    assert bifrost_edition.main() == 0
+    install_state.probe.cache_clear()
+    assert install_state.probe().fresh
