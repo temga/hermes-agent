@@ -76,8 +76,8 @@ jobs:
           node --version
           npm --version
           NODE_MAJOR=$(node -e "console.log(process.versions.node.split('.')[0])")
-          if [ "$NODE_MAJOR" -lt 20 ]; then
-            echo "::error::Node 20+ required, got $(node --version)"
+          if [ "$NODE_MAJOR" -lt 26 ]; then
+            echo "::error::Node 26+ required (package.json engines), got $(node --version)"
             exit 1
           fi
           echo "✓ Node $NODE_MAJOR OK"
@@ -157,10 +157,12 @@ jobs:
           retention-days: 30
 
       - name: Upload DMG to release
-        if: startsWith(github.ref, 'refs/tags/v')
+        # A tag push, or a manual run that rebuilds a tag (`ref: v...`) to fill in its release.
+        if: startsWith(github.ref, 'refs/tags/v') || startsWith(inputs.ref, 'v') || startsWith(inputs.ref, 'refs/tags/v')
         run: |
           set -euo pipefail
-          TAG="${GITHUB_REF#refs/tags/}"
+          REF="${{ inputs.ref || github.ref }}"
+          TAG="${REF#refs/tags/}"
           DMG="${{ steps.find_dmg.outputs.dmg_path }}"
 
           # Try to create the release; if it already exists (race with Windows job), upload instead.
@@ -205,13 +207,18 @@ jobs:
           cargo --version
           Write-Host "Rust toolchain OK"
 
+      # The runner's system Node is older than the repo's engines field allows.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # 7.0.0
+        with:
+          node-version: 26.12.1
+
       - name: Verify Node version
         run: |
           node --version
           npm --version
           $nodeMajor = [int]((node --version) -replace '^v', '').Split('.')[0]
-          if ($nodeMajor -lt 20) {
-            Write-Error "::error::Node 20+ required, got $(node --version)"
+          if ($nodeMajor -lt 26) {
+            Write-Error "::error::Node 26+ required (package.json engines), got $(node --version)"
             exit 1
           }
           Write-Host "OK: Node $nodeMajor OK"
@@ -261,9 +268,10 @@ jobs:
           retention-days: 30
 
       - name: Upload EXE to release
-        if: startsWith(github.ref, 'refs/tags/v')
+        # A tag push, or a manual run that rebuilds a tag (`ref: v...`) to fill in its release.
+        if: startsWith(github.ref, 'refs/tags/v') || startsWith(inputs.ref, 'v') || startsWith(inputs.ref, 'refs/tags/v')
         run: |
-          $tag = $env:GITHUB_REF -replace '^refs/tags/', ''
+          $tag = '${{ inputs.ref || github.ref }}' -replace '^refs/tags/', ''
           $exe = '${{ steps.find_exe.outputs.exe_path }}'
           $repo = $env:GITHUB_REPOSITORY
           $token = $env:GH_TOKEN
