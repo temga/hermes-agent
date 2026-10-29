@@ -83,6 +83,22 @@ describe('onboarding Picker', () => {
     expect(screen.getByText('Recommended').closest('button')?.textContent).toContain('Bifrost Gateway')
   })
 
+  it('keeps the clicked provider when the key form remounts', () => {
+    setProviders([makeOAuthProvider('nous', 'Nous Portal')])
+    const first = render(<Picker ctx={ctx} />)
+
+    fireEvent.click(screen.getByText('Bifrost Gateway'))
+    expect(screen.queryByText('OpenRouter')).toBeNull()
+
+    // A saved key hands over to the model-confirm step, which unmounts the picker; coming back
+    // mounts a fresh one that must still be the Bifrost form, not the whole key catalog.
+    first.unmount()
+    render(<Picker ctx={ctx} />)
+
+    expect(screen.getAllByText(/Bifrost/).length).toBeGreaterThan(0)
+    expect(screen.queryByText('OpenRouter')).toBeNull()
+  })
+
   it('offers "choose later" on first run and persists the skip', () => {
     setProviders([makeOAuthProvider('nous', 'Nous Portal')])
     render(<Picker ctx={ctx} />)

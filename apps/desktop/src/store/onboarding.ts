@@ -86,6 +86,10 @@ export interface DesktopOnboardingState {
   configured: boolean | null
   flow: OnboardingFlow
   mode: OnboardingMode
+  /** The provider row the user picked for the API-key form (e.g. BIFROST_API_KEY), or null for
+   *  the full catalog. Kept here beside `mode`, not in the Picker: the picker unmounts while a
+   *  save runs the model-confirm step, and a remount must still show that one provider. */
+  apiKeyEnv?: null | string
   providers: null | OAuthProvider[]
   reason: null | string
   requested: boolean
@@ -661,6 +665,7 @@ export function startManualOnboarding(
   patch({
     manual: true,
     targetScope: captureOnboardingScope(profile),
+    apiKeyEnv: null,
     providers: null,
     requested: true,
     localEndpoint: false,
@@ -757,6 +762,7 @@ export function completeDesktopOnboarding(connected = false) {
     configured: true,
     flow: { status: 'idle' },
     mode: 'oauth',
+    apiKeyEnv: null,
     providers: null,
     reason: null,
     requested: false,
@@ -787,7 +793,12 @@ export function dismissFirstRunOnboarding() {
 }
 
 export function setOnboardingMode(mode: OnboardingMode) {
-  patch({ mode })
+  patch(mode === 'oauth' ? { apiKeyEnv: null, mode } : { mode })
+}
+
+/** Open the API-key form, focused on one provider's key when a provider row was clicked. */
+export function openOnboardingApiKeyForm(envKey?: string) {
+  patch({ apiKeyEnv: envKey ?? null, mode: 'apikey' })
 }
 
 /**

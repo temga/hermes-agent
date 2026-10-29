@@ -29,6 +29,7 @@ import {
   DEFAULT_ONBOARDING_REASON,
   dismissFirstRunOnboarding,
   type OnboardingContext,
+  openOnboardingApiKeyForm,
   peekPendingProviderOAuth,
   refreshOnboarding,
   saveOnboardingApiKey,
@@ -632,16 +633,13 @@ const persistShowAll = (value: boolean) => {
 
 export function Picker({ ctx }: { ctx: OnboardingContext }) {
   const { t } = useI18n()
-  const { localEndpoint, manual, mode, providers } = useStore($desktopOnboarding)
+  const { apiKeyEnv, localEndpoint, manual, mode, providers } = useStore($desktopOnboarding)
   const [showAll, setShowAll] = useState(readShowAll)
-  // Which key-form option to preselect when we flip to 'apikey' mode. The
-  // OpenRouter row selects its key; the generic link lands on the first option.
-  const [apiKeyInitialEnv, setApiKeyInitialEnv] = useState<string | undefined>(undefined)
-
-  const openKeyForm = (envKey?: string) => {
-    setApiKeyInitialEnv(envKey)
-    setOnboardingMode('apikey')
-  }
+  // Which key-form option to preselect in 'apikey' mode. A provider row (Bifrost, Fireworks,
+  // OpenRouter) selects its key; the generic link lands on the full catalog. Lives in the store so
+  // a remount (back from the model-confirm step) keeps the clicked provider.
+  const apiKeyInitialEnv = apiKeyEnv ?? undefined
+  const openKeyForm = (envKey?: string) => openOnboardingApiKeyForm(envKey)
 
   const ordered = useMemo(() => (providers ? sortProviders(providers) : []), [providers])
   const hasOauth = ordered.length > 0
