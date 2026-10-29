@@ -184,6 +184,18 @@ Update button) always fetches fresh and invalidates the cached answer. Explicit
 checks — `hermes update --check`, the desktop's "Check for Updates…" menu item,
 Settings → About → "Check now" — bypass the cache.
 
+### Update branch
+
+`updates.branch` names the branch `hermes update` pulls from and every update
+check compares against (CLI banner, `hermes update --check`, dashboard). It
+defaults to `main`; a fork or custom deployment that ships from another branch
+sets it once instead of passing `--branch` on every run.
+
+```yaml
+updates:
+  branch: main
+```
+
 ### SSH authentication
 
 The startup update check reads the origin URL with the same isolated Git
@@ -821,6 +833,18 @@ hermes config set skills.config.myplugin.path ~/myplugin-data
 ```
 
 For details on declaring config settings in your own skills, see [Creating Skills — Config Settings](../developer-guide/creating-skills.md#config-settings-configyaml).
+
+### Skills Hub mirror
+
+`skills.hub_url` points skill search and the Desktop catalog at a mirror of the
+Skills Hub, for networks where the default index host is blocked. Give the
+mirror's origin (Hermes reads `<origin>/docs/api/skills-index.json`), or a full
+URL ending in `.json` to use that index file as is. Empty uses the default hub.
+
+```yaml
+skills:
+  hub_url: https://hub.example.com
+```
 
 ### Auto-loading skills every session
 
