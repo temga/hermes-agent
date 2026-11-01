@@ -128,6 +128,18 @@ describe('onboarding Picker', () => {
     expect(screen.queryByText('Nous Portal')).toBeNull()
   })
 
+  it('drops Nous Portal from a clicked provider key form but keeps it on the generic one', () => {
+    setProviders([makeOAuthProvider('nous', 'Nous Portal')])
+    render(<Picker ctx={ctx} />)
+
+    fireEvent.click(screen.getByText('Bifrost Gateway'))
+    expect(screen.queryByText('Nous Portal')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to sign in' }))
+    fireEvent.click(screen.getByRole('button', { name: 'I have an API key' }))
+    expect(screen.getByText('Nous Portal')).toBeTruthy()
+  })
+
   it('hides "choose later" in manual (add-provider) mode', () => {
     setProviders([makeOAuthProvider('nous', 'Nous Portal')])
     $desktopOnboarding.set({ ...$desktopOnboarding.get(), manual: true })

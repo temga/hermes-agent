@@ -770,7 +770,9 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
 
 // The API-key step of the picker. Nous stays reachable from it, including when
 // the provider list failed to load and there is no picker to go back to; the
-// custom-endpoint form (localEndpoint) is a deliberate destination and skips it.
+// custom-endpoint form (localEndpoint) is a deliberate destination and skips it,
+// and so is a provider row's form (Bifrost, Fireworks, ...): the user already
+// chose, and "back to sign in" still leads to Nous.
 function KeyFormStep({
   apiKeyOptions,
   ctx,
@@ -790,7 +792,8 @@ function KeyFormStep({
   onSelect: (provider: OAuthProvider) => void
   providers: OAuthProvider[]
 }) {
-  const nous = localEndpoint ? null : (providers.find(p => p.id === FEATURED_ID) ?? NOUS_FALLBACK)
+  const chosenProvider = hasOauth && initialEnvKey !== undefined
+  const nous = localEndpoint || chosenProvider ? null : (providers.find(p => p.id === FEATURED_ID) ?? NOUS_FALLBACK)
 
   return (
     <div className="grid gap-3">
