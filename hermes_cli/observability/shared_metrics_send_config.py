@@ -14,6 +14,12 @@ logger = logging.getLogger(__name__)
 #: Tests and the staging E2E write this key into a throwaway profile instead.
 DEFAULT_ENDPOINT = "https://telemetry.nousresearch.com/v1/telemetry"
 
+#: Bifrost edition kill switch: shared metrics are off for good. Nothing is collected, nothing
+#: reaches Nous whatever config.yaml says, and no surface (CLI, Desktop, dashboard) offers them.
+#: Read as a module attribute at call time; tests/conftest.py turns it off so upstream's pipeline
+#: tests keep exercising the code each sync brings in.
+SHARED_METRICS_DISABLED = True
+
 _LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "[::1]"})
 
 # Module-level latch: the enabled/send mismatch is a static misconfiguration,
@@ -51,6 +57,9 @@ def resolve_send_config(config: dict | None) -> SendConfig:
     have to re-check the combination.
     """
     global _warned_send_without_collection
+
+    if SHARED_METRICS_DISABLED:
+        return SendConfig(enabled=False, send=False, endpoint=DEFAULT_ENDPOINT)
 
     raw = config if isinstance(config, dict) else {}
     telemetry = raw.get("telemetry")

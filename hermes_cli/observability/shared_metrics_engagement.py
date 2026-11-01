@@ -135,6 +135,10 @@ def _profile_hash(profile_home: Path) -> str:
 
 def _collects(home: Path) -> bool:
     """The root profile's own collection consent (read-only; never touches its runtime)."""
+    from . import shared_metrics_send_config
+
+    if shared_metrics_send_config.SHARED_METRICS_DISABLED:
+        return False
     from hermes_constants import reset_hermes_home_override, set_hermes_home_override
 
     token = set_hermes_home_override(str(home))

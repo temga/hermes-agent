@@ -1372,6 +1372,10 @@ def enabled() -> bool:
         config = None
     for key in ("telemetry", "shared_metrics"):
         config = config.get(key) if isinstance(config, dict) else None
+    from hermes_cli.observability import shared_metrics_send_config
+
+    if shared_metrics_send_config.SHARED_METRICS_DISABLED:
+        config = None
     if isinstance(config, dict) and config.get("enabled") is True:
         return True
     if profile_key not in _RUNTIMES:  # the opted-out hot path: nothing to tear down, no lock

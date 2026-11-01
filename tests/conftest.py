@@ -447,6 +447,15 @@ def _isolate_hermes_home(_hermetic_environment):
 
 
 @pytest.fixture(autouse=True)
+def _shared_metrics_kill_switch_off(monkeypatch):
+    """Bifrost edition ships shared metrics hard-disabled; lift the switch so upstream's pipeline
+    tests keep running. tests/hermes_cli/test_bifrost_shared_metrics_off.py turns it back on."""
+    from hermes_cli.observability import shared_metrics_send_config
+
+    monkeypatch.setattr(shared_metrics_send_config, "SHARED_METRICS_DISABLED", False)
+
+
+@pytest.fixture(autouse=True)
 def _reset_foreground_exit_fence():
     """A test that drives a hard-exit path raises the one-way foreground-spawn fence; lower it after."""
     yield
