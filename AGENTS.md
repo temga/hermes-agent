@@ -7,6 +7,8 @@ goes in `website/docs/developer-guide/`.
 
 **Never give up on the right solution.**
 
+**Bifrost fork: read `FORK.md` first.**
+
 ## What Hermes Is
 
 Hermes is a personal AI agent that runs one agent core across a CLI, a TUI, an Electron desktop
