@@ -43,11 +43,13 @@ _DEFAULT_BASE_URL = resolve_bifrost_base_url()
 # Curated model list, in preference order — the full catalog is dynamic (24+
 # models across 4 upstream providers) and each sk-bf-* key reaches only part of
 # it. The silent default (onboarding, /api/model/recommended-default) is the
-# first entry the key's live /v1/models listing carries. Qwen leads: the
-# gateway lists tropass/GLM-5.2 to keys it then answers 404 for, and the
-# listing cannot tell. Users can set any model id in config.yaml and it will
-# be passed through to the gateway.
+# first entry the key's live /v1/models listing carries. "auto" leads: the
+# gateway picks the upstream model itself. A key without it gets Qwen, not
+# GLM: the gateway lists tropass/GLM-5.2 to keys it then answers 404 for, and
+# the listing cannot tell. Users can set any model id in config.yaml and it
+# will be passed through to the gateway.
 _FALLBACK_MODELS = (
+    "auto",
     "neuraldeep/qwen3.8-27b",
     "turbocloud/GLM-5.2",
     "tropass/GLM-5.2",

@@ -4449,7 +4449,7 @@
      "role": "user"
     }
    ],
-   "model": "neuraldeep/qwen3.8-27b",
+   "model": "auto",
    "timeout": 1800.0,
    "tools": [
     {
@@ -4472,7 +4472,7 @@
     }
    ]
   },
-  "model": "neuraldeep/qwen3.8-27b",
+  "model": "auto",
   "off": {
    "messages": [
     {
@@ -4507,7 +4507,7 @@
      "role": "user"
     }
    ],
-   "model": "neuraldeep/qwen3.8-27b",
+   "model": "auto",
    "timeout": 1800.0,
    "tools": [
     {
@@ -4564,7 +4564,7 @@
      "role": "user"
     }
    ],
-   "model": "neuraldeep/qwen3.8-27b",
+   "model": "auto",
    "timeout": 1800.0,
    "tools": [
     {
