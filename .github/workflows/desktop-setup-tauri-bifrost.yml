@@ -69,6 +69,8 @@ jobs:
           source "$HOME/.cargo/env" 2>/dev/null || true
           rustc --version
           cargo --version
+          # The DMG is universal so it also launches on Intel Macs; the arm64 runner needs the x86_64 std.
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
           echo "Rust toolchain OK"
 
       - name: Verify Node version
@@ -116,7 +118,7 @@ jobs:
           # Bundle without upstream's Icon Composer icon (icons/icon.icon): compiling it needs actool,
           # which fails under the launchd runner service ("actool did not generate Assets.car").
           # icon.icns still provides the macOS app icon.
-          npm run tauri:build -- --config '{"bundle":{"icon":["icons/32x32.png","icons/128x128.png","icons/128x128@2x.png","icons/icon.icns","icons/icon.ico"]}}'
+          npm run tauri:build -- --target universal-apple-darwin --config '{"bundle":{"icon":["icons/32x32.png","icons/128x128.png","icons/128x128@2x.png","icons/icon.icns","icons/icon.ico"]}}'
         env:
           TAURI_ENV_PLATFORM: darwin
           HERMES_BUILD_PIN_COMMIT: ${{ github.sha }}
@@ -133,17 +135,23 @@ jobs:
       - name: Find and rename DMG
         id: find_dmg
         run: |
-          DMG=$(find apps/bootstrap-installer/src-tauri/target/release/bundle/dmg -name "*.dmg" -type f 2>/dev/null | head -1)
+          DMG=$(find apps/bootstrap-installer/src-tauri/target/universal-apple-darwin/release/bundle/dmg -name "*.dmg" -type f 2>/dev/null | head -1)
           if [ -z "$DMG" ]; then
             echo "ERROR: No DMG found"
-            find apps/bootstrap-installer/src-tauri/target/release/bundle -type f 2>/dev/null || true
+            find apps/bootstrap-installer/src-tauri/target/universal-apple-darwin/release/bundle -type f 2>/dev/null || true
             exit 1
           fi
-          RENAMED="apps/bootstrap-installer/src-tauri/target/release/bundle/dmg/Hermes-Setup-Bifrost.dmg"
+          RENAMED="apps/bootstrap-installer/src-tauri/target/universal-apple-darwin/release/bundle/dmg/Hermes-Setup-Bifrost.dmg"
           cp "$DMG" "$RENAMED"
           echo "dmg_path=$RENAMED" >> "$GITHUB_OUTPUT"
           echo "Found: $DMG → $RENAMED"
           ls -lh "$RENAMED"
+          # Intel Macs refuse an arm64-only app ("not supported on this Mac"); fail the build instead.
+          for BIN in apps/bootstrap-installer/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app/Contents/MacOS/*; do
+            ARCHS=$(lipo -archs "$BIN")
+            echo "$BIN: $ARCHS"
+            case "$ARCHS" in *x86_64*arm64*|*arm64*x86_64*) ;; *) echo "::error::$BIN is not universal ($ARCHS)"; exit 1 ;; esac
+          done
           # Verify signature
           echo "=== Signature verification ==="
           codesign -dv --verbose=4 "$RENAMED" 2>&1 || true
@@ -153,7 +161,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Hermes-Setup-Bifrost-dmg
-          path: apps/bootstrap-installer/src-tauri/target/release/bundle/dmg/Hermes-Setup-Bifrost.dmg
+          path: apps/bootstrap-installer/src-tauri/target/universal-apple-darwin/release/bundle/dmg/Hermes-Setup-Bifrost.dmg
           retention-days: 30
 
       - name: Upload DMG to release
