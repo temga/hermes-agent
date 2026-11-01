@@ -10,6 +10,22 @@ upstream-ным; форк добавляет «один ключ на всё» �
 Правки ядра — точечные, только там, где без них нельзя, и каждая отмечена комментарием
 `Bifrost edition` / `BIFROST-EDITION`.
 
+## Правила для разработчиков и AI-агентов
+
+- **Ядро — только по согласованию.** Прежде чем править что-то вне Bifrost-плагинов,
+  `hermes_cli/bifrost_edition.py`, скриптов установки и CI (например `hermes_cli/`, `agent/`,
+  `gateway/`, `apps/desktop/src/`), объясните, зачем нужна правка ядра и нет ли пути без неё.
+  Каждую правку ядра помечайте комментарием `Bifrost edition`.
+- **Каждая задача — своя ветка** `feat/…` / `fix/…` / `docs/…`, вливается в `bifrost-next`.
+  Напрямую в `main` / `main-bifrost` не разрабатываем.
+- **Без явного «да» не пушить** в `main`, в `bifrost-edition`, не ставить и не пушить теги и не
+  запускать сборку установщиков вручную: у Bifrost Edition живые клиенты, push в `main` сразу
+  показывает им «доступно обновление», а тег публикует новые установщики. Перед вопросом —
+  короткий список того, что получат клиенты.
+- **Плагины Bifrost правятся только в этом дереве**, отдельный репозиторий плагинов
+  синхронизируется отсюда (см. ниже).
+- Общие правила Hermes (`AGENTS.md` в корне и в каталогах) действуют и здесь.
+
 ## Версия и база upstream
 
 | | |
@@ -124,7 +140,10 @@ git rev-list --left-right --count upstream/main...HEAD
 - `tools/skills_hub_search.py`, `tui_gateway/methods_config.py` — зеркало Skills Hub;
 - `scripts/install.sh`, `scripts/install.ps1`, `scripts/build/electron-runtime.mjs`;
 - `apps/desktop/src/components/onboarding/*`, `apps/desktop/src/store/onboarding*.ts`,
-  `apps/desktop/src/app/settings/providers-settings.tsx`, `apps/desktop/electron/main.ts`.
+  `apps/desktop/src/app/settings/providers-settings.tsx`, `apps/desktop/electron/main.ts`;
+- `README.md`, `AGENTS.md`, `plugins/AGENTS.md` — ссылки на этот файл. Корневой `AGENTS.md`
+  упирается в лимит цепочки 30k символов (`scripts/ci/check_agents_md_size.py`): если upstream
+  его вырастит, ссылку оставить, а длинный текст держать здесь.
 
 Полный список: `git diff --stat $(git merge-base HEAD upstream/main) HEAD`.
 

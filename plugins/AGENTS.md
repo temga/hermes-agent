@@ -16,6 +16,9 @@ command. A hook with no concrete consumer is speculative infrastructure and is r
 
 ## What may live in this tree (policy)
 
+- **Bifrost Edition fork:** `*/bifrost/` plugins are edited here only; export the standalone pack
+  with `scripts/bifrost/sync_plugin_pack.py` and keep each `_keyresolver.py` copy identical (`FORK.md`).
+
 - **No new in-tree memory providers (May 2026).** `plugins/memory/` is closed (byterover,
   retaindb stay until their Oct 15 2026 removal). hindsight (Sep 2026), honcho, supermemory,
   mem0, openviking and holographic (Oct 2026) moved to the plugin catalog — `plugin-catalog/<name>.yaml`, auto-installed by
