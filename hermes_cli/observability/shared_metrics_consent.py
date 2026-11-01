@@ -59,6 +59,12 @@ def consent_state(raw_cfg: Any) -> dict:
     an "off" answer from before ``OFFER_VERSION`` that may never have been seen; it reads undecided
     so every surface offers it once more. An opt-in was always a deliberate pick and stays, including
     a collect-only answer from before the offer dropped that choice."""
+    from . import shared_metrics_send_config
+
+    if shared_metrics_send_config.SHARED_METRICS_DISABLED:
+        # A settled "off": the CLI offer, the Desktop strip and dialog and the dashboard banner
+        # all key on ``decided``, so none of them appears.
+        return {"enabled": False, "send": False, "decided": True, "reask": False}
     section = _section(raw_cfg)
     enabled = section.get("enabled") is True
     answered = "enabled" in section or "send" in section

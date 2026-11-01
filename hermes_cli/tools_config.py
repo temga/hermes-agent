@@ -1165,7 +1165,9 @@ def tools_command(args=None, first_install: bool = False, config: dict | None = 
 
     global_idx = _add_row("Configure all platforms (global)", len(platform_keys) > 1)
     reconfig_idx = _add_row("Reconfigure an existing tool's provider or API key")
-    metrics_idx = _add_row(_shared_metrics_menu_label(config))
+    from hermes_cli.observability import shared_metrics_send_config
+
+    metrics_idx = _add_row(_shared_metrics_menu_label(config), not shared_metrics_send_config.SHARED_METRICS_DISABLED)
     mcp_idx = _add_row("Configure MCP server tools", bool(config.get("mcp_servers")))
     done_idx = _add_row("Done")
 
