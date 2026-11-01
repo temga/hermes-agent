@@ -53,9 +53,9 @@ describe('onboarding Picker', () => {
     render(<Picker ctx={ctx} />)
 
     expect(screen.getByText('Nous Portal')).toBeTruthy()
-    // Bifrost edition: the Bifrost Gateway row leads and is recommended too.
+    // Bifrost edition: the Bifrost Gateway row leads and is the only recommended one.
     expect(screen.getByText('Bifrost Gateway')).toBeTruthy()
-    expect(screen.getAllByText('Recommended')).toHaveLength(2)
+    expect(screen.getByText('Recommended').closest('button')?.textContent).toContain('Bifrost Gateway')
     // Fireworks stays behind the disclosure with the other alternatives; only
     // Nous Portal is visible before the user expands the list.
     expect(screen.queryByText('Fireworks AI')).toBeNull()
@@ -118,7 +118,6 @@ describe('onboarding Picker', () => {
     render(<Picker ctx={ctx} />)
 
     expect(screen.getByText('Nous Portal')).toBeTruthy()
-    expect(screen.getByText('Recommended')).toBeTruthy()
     expect(screen.getByText('Fireworks AI')).toBeTruthy()
     cleanup()
 

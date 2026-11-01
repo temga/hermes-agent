@@ -37,36 +37,24 @@ export function FeaturedProviderRow({
   const freeTier = provider.status?.free_tier === true
   const loggedIn = provider.status?.logged_in && !freeTier
 
+  // Bifrost edition: only the Bifrost row carries the arc border and the "Recommended" badge, so
+  // Nous keeps its place and pitch but renders as a plain row.
   return (
-    <button
-      className="group relative flex w-full items-center justify-between gap-4 rounded-[8px] bg-primary/[0.06] px-3 py-2.5 text-left transition-colors hover:bg-primary/10"
-      onClick={() => onSelect(provider)}
-      type="button"
-    >
-      <span aria-hidden className="arc-border arc-reverse arc-nous" />
+    <RowButton className={PROVIDER_ROW_CLASS} onClick={() => onSelect(provider)}>
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <img alt="" className="size-5 shrink-0 rounded" src={assetPath('apple-touch-icon.png')} />
           <span className="text-[length:var(--conversation-text-font-size)] font-semibold">
             {freeTier ? t.freeTier.providerRowTitle : providerTitle(provider)}
           </span>
-          {freeTier ? (
-            <FreeTierTag />
-          ) : loggedIn ? (
-            <ConnectedTag />
-          ) : (
-            <span className="inline-flex items-center gap-1.5 bg-primary px-2 py-0.5 text-[0.64rem] font-semibold uppercase tracking-[0.16em] text-primary-foreground">
-              <span aria-hidden="true" className="dither inline-block size-2 shrink-0" />
-              {t.onboarding.recommended}
-            </span>
-          )}
+          {freeTier ? <FreeTierTag /> : loggedIn ? <ConnectedTag /> : null}
         </div>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
           {freeTier ? t.freeTier.providerRowPitch : t.onboarding.featuredPitch}
         </p>
       </div>
-      <ChevronRight className="size-4 shrink-0 text-primary transition group-hover:translate-x-0.5" />
-    </button>
+      <ChevronRight className="size-4 shrink-0 text-muted-foreground transition group-hover:text-foreground" />
+    </RowButton>
   )
 }
 
