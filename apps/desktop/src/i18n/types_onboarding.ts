@@ -12,6 +12,7 @@ export interface OnboardingTranslations {
   haveApiKey: string
   chooseLater: string
   recommended: string
+  bifrostPitch: string
   connected: string
   featuredPitch: string
   fireworksPitch: string

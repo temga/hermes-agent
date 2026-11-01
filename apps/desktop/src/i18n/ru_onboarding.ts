@@ -16,8 +16,9 @@ export const ruOnboarding: TranslationOverrides['onboarding'] = {
   recommended: 'Рекомендуется',
   defaultModelNotSaved: (provider: string, detail: string) =>
     `Ключ ${provider} сохранён, но Hermes не смог выбрать для него модель по умолчанию. ${detail}`.trim(),
+  bifrostPitch: 'Стандартный шлюз для сотрудников Ростелекома и Wink: один ключ sk-bf-*',
   connected: 'Подключено',
-  featuredPitch: 'Одна подписка, 300+ передовых моделей — рекомендуемый способ запускать Hermes',
+  featuredPitch: 'Одна подписка, 300+ передовых моделей',
   fireworksPitch: 'Прямой API моделей — передовые модели на хостинге Fireworks',
   routerAiPitch: 'Российский агрегатор API, совместимый с OpenAI, — более 300 моделей, оплата в рублях',
   neuralDeepPitch: 'Собственный AI-хаб на российских GPU (соответствует 152-ФЗ) — gpt-oss, qwen, gemma',

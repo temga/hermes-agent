@@ -140,9 +140,7 @@ export function BifrostProviderRow({ onClick }: { onClick: () => void }) {
             {t.onboarding.recommended}
           </span>
         </div>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          One key (sk-bf-*) — LLM, image gen, web search, STT &amp; TTS.
-        </p>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">{t.onboarding.bifrostPitch}</p>
       </div>
       <ChevronRight className="size-4 shrink-0 text-primary transition group-hover:translate-x-0.5" />
     </RowButton>
