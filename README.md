@@ -16,6 +16,29 @@
   <a href="README.es.md"><img src="https://img.shields.io/badge/Lang-Español-orange?style=for-the-badge" alt="Español"></a>
 </p>
 
+> [!IMPORTANT]
+> **Это форк — Hermes Bifrost Edition** ([temga/hermes-agent](https://github.com/temga/hermes-agent)),
+> адаптированный для Wink и Ростелекома. Текущий релиз: **`v0.22.5-bifrost.8`** на базе upstream
+> **v0.22.5** ([NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) `main` до
+> `9bba78efa5`, 2026-10-31).
+>
+> Основные отличия от оригинала:
+> - **Один ключ `sk-bf-*`** через Bifrost Gateway (`router.rove-ai.ru`) на LLM, генерацию
+>   изображений, веб-поиск, STT и TTS — встроенные плагины `plugins/*/bifrost/`;
+> - онбординг и Desktop с провайдером Bifrost, Nous Portal без статуса «рекомендуется»;
+> - **телеметрия в Nous полностью отключена**, предложения согласия скрыты;
+> - зеркало Skills Hub (`skills.hub_url`) для сетей, где хаб Nous недоступен;
+> - обновления и установщики (Tauri DMG/EXE, `install.sh`/`install.ps1`) идут из форка, ветка
+>   задаётся `updates.branch`.
+>
+> Установка форка: установщик *Hermes Setup — Bifrost Edition* со страницы
+> [Releases](https://github.com/temga/hermes-agent/releases) или
+> `curl -fsSL https://raw.githubusercontent.com/temga/hermes-agent/main/scripts/install.sh | bash`.
+> Команды установки ниже ставят оригинальный Hermes.
+>
+> Подробно — отличия, изменённые файлы ядра, ветки, релизы и синхронизация с upstream:
+> **[FORK.md](FORK.md)**. Остальная часть README — оригинальная из upstream.
+
 **The self-improving AI agent built by [Nous Research](https://nousresearch.com).** It's the only agent with a built-in learning loop — it creates skills from experience, improves them during use, nudges itself to persist knowledge, searches its own past conversations, and builds a deepening model of who you are across sessions. Run it on a $5 VPS, a GPU cluster, or serverless infrastructure that costs nearly nothing when idle. It's not tied to your laptop — talk to it from Telegram while it works on a cloud VM.
 
 Use any model you want — [Nous Portal](https://portal.nousresearch.com), OpenRouter, OpenAI, your own endpoint, and [many others](https://hermes-agent.nousresearch.com/docs/integrations/providers). Switch with `hermes model` — no code changes, no lock-in.
