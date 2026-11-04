@@ -290,6 +290,51 @@ def test_base_self_reference_gated_on_a_selected_extra_keeps_its_extra(layout):
     assert optional == {"runtime": [], "feature": ["chosen-dep==1.0"], "deep": ["other-dep==1.0"]}
 
 
+def test_virtual_plugin_self_reference_installs_its_own_extra_after_the_rename(layout):
+    """A virtual member is renamed ``hermes-plugin-<key>``; its ``own-name[extra]`` reference
+    must follow, or uv resolves the declared name as some other package from the index and
+    the extra the plugin asked for is never installed."""
+    import tomllib
+
+    tmp, core, plugin, _ = layout
+    metadata = plugin / "pyproject.toml"
+    # Declared under a name the index also serves, so the stale reference resolves silently.
+    metadata.write_text(metadata.read_text().replace('name="plugin-member"', 'name="other-dep"').replace(
+        'dependencies=["member-dep==1.0"]', 'dependencies=["member-dep==1.0", "Other_Dep[Runtime]>=0"]') +
+        '\n[project.optional-dependencies]\nruntime=["chosen-dep==1.0"]\n')
+    root = tmp / "workspace"
+    environment = managed_environment(tmp / "env")
+    ws.lock_and_sync([plugin], [], root=root, source=core, seed_lock=None, environment=environment)
+    from pm.environments import site_packages
+
+    installed = {p.name.split("-")[0] for p in site_packages(environment.destination).glob("*.dist-info")}
+    assert "chosen_dep" in installed and "other_dep" not in installed
+    project = tomllib.loads(next((root / "plugin-sources").iterdir()).joinpath("pyproject.toml").read_text())["project"]
+    assert project["dependencies"] == ["member-dep==1.0", f"{project['name']}[Runtime]>=0"]
+
+
+def test_virtual_plugin_self_references_follow_the_rename_everywhere(layout):
+    """Extras, specifiers, markers and conflict entries keep their shape; only the name moves,
+    and the extras closure still sees the renamed references (marker-false extras stay empty)."""
+    import tomllib
+
+    tmp, _, plugin, _ = layout
+    metadata = plugin / "pyproject.toml"
+    metadata.write_text(metadata.read_text().replace(
+        'dependencies=["member-dep==1.0"]', 'dependencies=["member-dep==1.0", "plugin_member[a]"]').replace(
+        '[tool.uv]\n', '[tool.uv]\nconflicts=[[{package="Plugin-Member",extra="a"},{extra="b"}]]\n', 1) +
+        '\n[project.optional-dependencies]\na=["plugin-member[b] ; python_version >= \'3\'"]\n'
+        'b=["chosen-dep==1.0"]\nunused=["base-dep==2.0"]\n')
+    member = ws._workspace_member(plugin, tmp / "virtual", identity=plugin)
+    document = tomllib.loads((member / "pyproject.toml").read_text())
+    name = document["project"]["name"]
+    assert name.startswith("hermes-plugin-member-")
+    assert document["project"]["dependencies"] == ["member-dep==1.0", f"{name}[a]"]
+    assert document["project"]["optional-dependencies"] == {
+        "a": [f"{name}[b] ; python_version >= '3'"], "b": ["chosen-dep==1.0"]}
+    assert document["tool"]["uv"]["conflicts"] == [[{"package": name, "extra": "a"}, {"extra": "b"}]]
+
+
 def test_classify_network_failure_stays_generic():
     from pm.workspace import ResolutionConflict, classify_uv_failure
 
@@ -367,3 +412,27 @@ def test_staging_root_and_env_are_honored_without_live_mutation(layout, monkeypa
         assert kwargs["env"]["UV_PROJECT_ENVIRONMENT"] == str(environment.destination)
         assert kwargs["env"]["UV_PYTHON"] == str(environment.python)
     assert os.environ["PM_WORKSPACE_TEST_SENTINEL"] == "live"
+
+
+def test_selected_plugin_extra_naming_core_installs_the_workspace_core(layout):
+    """A plugin extra pinning core (``hermes-agent[x] @ git+…``) resolves to this checkout.
+
+    The generated root IS core, so uv refuses any member requirement naming it without a
+    ``{ workspace = true }`` source ("is included as a workspace member, but is missing an
+    entry in tool.uv.sources") and the whole lock fails. Any spelling of the name binds,
+    and the requested core extra installs from the workspace instead of the URL.
+    """
+    from pm.environments import site_packages
+
+    tmp, core, plugin, _ = layout
+    (plugin / "pyproject.toml").write_text(
+        '[project]\nname="core-pinning-plugin"\nversion="1"\nrequires-python=">=3.11"\n'
+        'dependencies=["member-dep==1.0"]\n[project.optional-dependencies]\n'
+        'chosen=["Construction_Root[other] @ git+https://example.invalid/hermes-agent'
+        '@0000000000000000000000000000000000000000"]\n[tool.uv]\npackage=false\n', encoding="utf-8")
+    environment = managed_environment(tmp / "env")
+    ws.lock_and_sync([plugin], ["chosen"], root=tmp / "workspace", source=core, seed_lock=None,
+                     environment=environment)
+    installed = {p.name.split("-")[0] for p in site_packages(environment.destination).glob("*.dist-info")}
+    assert {"member_dep", "other_dep"} <= installed
+
