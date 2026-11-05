@@ -4628,6 +4628,15 @@ export const esOverrides = {
           system_prompt: 'Prompt del sistema',
           tool_definitions: 'Definiciones de herramientas'
         },
+        compact: {
+          action: 'Compactar conversación',
+          busyHint: 'Termina o detén primero la respuesta en curso',
+          confirm: 'Compactar',
+          hint: 'Resume el contexto anterior para hacer espacio. Continúa en esta misma conversación.',
+          question: '¿Compactar esta conversación en un resumen?',
+          questionNamed: title => `¿Compactar «${title}» en un resumen?`,
+          working: 'Compactando…'
+        },
         empty: 'Aún no hay datos de contexto',
         loading: 'Cargando desglose…',
         percentFull: percent => `${percent}% lleno`,
@@ -5165,6 +5174,10 @@ export const esOverrides = {
       authorized: server => `${server} autorizado`,
       failed: server => `La configuración falló para ${server}`,
       toolCount: count => (count === 1 ? '1 herramienta' : `${count} herramientas`),
+      launchCommand: target => `Ejecuta: ${target}`,
+      launchRemote: target => `Se conecta a: ${target}`,
+      launchEnv: keys => `Entorno: ${keys}`,
+      launchCwd: dir => `Directorio de trabajo: ${dir}`,
       envRequired: 'Rellena primero las credenciales obligatorias',
       sendFailed: 'No se pudo enviar la respuesta de configuración MCP',
       reloadFailed: 'Servidor guardado, pero falló la recarga de herramientas MCP — se cargarán en la próxima sesión',

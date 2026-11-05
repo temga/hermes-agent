@@ -4052,6 +4052,15 @@ export const zhOverrides = {
           system_prompt: '系统提示词',
           tool_definitions: '工具定义'
         },
+        compact: {
+          action: '压缩对话',
+          busyHint: '请先完成或停止当前回复',
+          confirm: '压缩',
+          hint: '总结较早的上下文以腾出空间，继续当前对话。',
+          question: '将此对话压缩为摘要？',
+          questionNamed: title => `将“${title}”压缩为摘要？`,
+          working: '正在压缩…'
+        },
         empty: '暂无上下文数据',
         loading: '正在加载明细…',
         percentFull: percent => `已用 ${percent}%`,
@@ -4470,6 +4479,10 @@ export const zhOverrides = {
       authorized: server => `已授权 ${server}`,
       failed: server => `${server} 设置失败`,
       toolCount: count => `${count} 个工具`,
+      launchCommand: target => `将运行：${target}`,
+      launchRemote: target => `将连接：${target}`,
+      launchEnv: keys => `环境变量：${keys}`,
+      launchCwd: dir => `工作目录：${dir}`,
       envRequired: '请先填写所需凭据',
       sendFailed: '无法发送 MCP 设置响应',
       reloadFailed: '服务器已保存，但重新加载 MCP 工具失败 — 将在下个会话加载',

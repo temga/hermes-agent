@@ -3674,6 +3674,15 @@ export interface Translations extends NoticeTranslations {
           system_prompt: string
           tool_definitions: string
         }
+        compact: {
+          action: string
+          busyHint: string
+          confirm: string
+          hint: string
+          question: string
+          questionNamed: (title: string) => string
+          working: string
+        }
         empty: string
         loading: string
         percentFull: (percent: number) => string
@@ -4059,6 +4068,11 @@ export interface Translations extends NoticeTranslations {
       authorized: (server: string) => string
       failed: (server: string) => string
       toolCount: (count: number) => string
+      launchCommand: (target: string) => string
+      launchRemote: (target: string) => string
+      /** The env var names a stdio server adds (comma-joined); values never reach the card. */
+      launchEnv: (keys: string) => string
+      launchCwd: (dir: string) => string
       envRequired: string
       sendFailed: string
       reloadFailed: string

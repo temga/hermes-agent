@@ -4653,6 +4653,15 @@ export const frOverrides = {
           system_prompt: 'Invite système',
           tool_definitions: "Définitions d'outils"
         },
+        compact: {
+          action: 'Compacter la conversation',
+          busyHint: "Terminez ou arrêtez d'abord la réponse en cours",
+          confirm: 'Compacter',
+          hint: 'Résumez le contexte ancien pour libérer de la place. Continuez dans cette même conversation.',
+          question: 'Compacter cette conversation en un résumé ?',
+          questionNamed: title => `Compacter « ${title} » en un résumé ?`,
+          working: 'Compaction…'
+        },
         empty: 'Aucune donnée de contexte pour le moment',
         loading: 'Chargement du détail…',
         percentFull: percent => `${percent}% plein`,
@@ -5189,6 +5198,10 @@ export const frOverrides = {
       authorized: server => `${server} autorisé`,
       failed: server => `Échec de la configuration de ${server}`,
       toolCount: count => (count === 1 ? '1 outil' : `${count} outils`),
+      launchCommand: target => `Exécute : ${target}`,
+      launchRemote: target => `Se connecte à : ${target}`,
+      launchEnv: keys => `Environnement : ${keys}`,
+      launchCwd: dir => `Dossier de travail : ${dir}`,
       envRequired: "Renseignez d'abord les identifiants requis",
       sendFailed: "Impossible d'envoyer la réponse de configuration MCP",
       reloadFailed:

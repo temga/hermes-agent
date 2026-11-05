@@ -3301,6 +3301,15 @@ export const ruOverrides = {
           system_prompt: 'Системный промпт',
           tool_definitions: 'Определения инструментов'
         },
+        compact: {
+          action: 'Сжать диалог',
+          busyHint: 'Сначала завершите или остановите текущий ответ',
+          confirm: 'Сжать',
+          hint: 'Сожмите старый контекст, чтобы освободить место. Разговор продолжится здесь же.',
+          question: 'Сжать этот диалог в краткое изложение?',
+          questionNamed: title => `Сжать «${title}» в краткое изложение?`,
+          working: 'Сжимаю…'
+        },
         empty: 'Данных контекста пока нет',
         loading: 'Загрузка разбивки…',
         percentFull: percent => `${percent}% занято`,
@@ -3639,6 +3648,10 @@ export const ruOverrides = {
       authorized: server => `${server} авторизован`,
       failed: server => `Настройка не удалась для ${server}`,
       toolCount: count => `${count} ${RU_NOUN(count, 'инструмент', 'инструмента', 'инструментов')}`,
+      launchCommand: target => `Запускает: ${target}`,
+      launchRemote: target => `Подключается к: ${target}`,
+      launchEnv: keys => `Окружение: ${keys}`,
+      launchCwd: dir => `Рабочая папка: ${dir}`,
       envRequired: 'Сначала заполните обязательные учётные данные',
       sendFailed: 'Не удалось отправить ответ на настройку MCP',
       reloadFailed: 'Сервер сохранён, но перезагрузка MCP-инструментов не удалась — они загрузятся в следующем сеансе',
