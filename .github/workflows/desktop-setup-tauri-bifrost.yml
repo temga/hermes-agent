@@ -85,9 +85,9 @@ jobs:
           echo "✓ Node $NODE_MAJOR OK"
 
       - name: Install bootstrap-installer deps
+        # The JS workspaces install with pnpm from one root pnpm-lock.yaml (npm is refused).
         run: |
-          cd apps/bootstrap-installer
-          npm ci
+          npx -y pnpm@12.15.0 install --frozen-lockfile --filter "{./apps/bootstrap-installer}..."
 
       - name: Build frontend
         run: |
@@ -232,9 +232,10 @@ jobs:
           Write-Host "OK: Node $nodeMajor OK"
 
       - name: Install bootstrap-installer deps
+        # The JS workspaces install with pnpm from one root pnpm-lock.yaml (npm is refused).
         run: |
-          Set-Location apps/bootstrap-installer
-          npm ci
+          npx -y pnpm@12.15.0 install --frozen-lockfile --filter "{./apps/bootstrap-installer}..."
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build frontend
         run: |
