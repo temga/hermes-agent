@@ -43,6 +43,7 @@ Type `/` in the CLI to open the autocomplete menu. Built-in commands are case-in
 | `/prompt` (alias: `/compose`) | Compose your next prompt in `$EDITOR` (markdown) instead of the inline input — useful for long, multi-line, or carefully-formatted prompts. |
 | `/retry` | Retry the last message (resend to agent) |
 | `/undo` | Remove the last user/assistant exchange |
+| `/rewind [N \| fork N]` | **Backtrack** (classic CLI; also `Esc Esc` on an idle, empty prompt). Opens a picker of your earlier prompts, newest first, with a preview of the selected one. `Enter` puts it back in the composer for editing: sending the edit cuts the session back to just before that prompt (the later messages are archived, as with `/undo`) and sends the new text; cancelling with `Esc Esc`, `Ctrl+C` or an empty submit removes nothing. `f` forks instead: a new branched session holding only the history before that prompt, with the prompt prefilled (not sent); the original session is kept as it was. `/rewind N` edits prompt N directly and `/rewind fork N` forks before it. |
 | `/title` | Set a title for the current session (usage: /title My Session Name) |
 | `/compress [here [N] \| focus topic]` | Manually compress conversation context (flush memories + summarize). `/compress here [N]` summarizes everything except the most recent N exchanges (default 2), kept verbatim — pick your own compression boundary. A focus topic narrows what a full summary preserves. |
 | `/rollback` | List or restore filesystem checkpoints (usage: /rollback [number]) |
@@ -121,7 +122,7 @@ Type `/` in the CLI to open the autocomplete menu. Built-in commands are case-in
 | `/connectors` | TUI-only. Open the connector accounts list: one row per account, `app · name · status`. Keys: ↑/↓ select, `r` rename (inline input; Enter saves, Esc cancels), `a` add another account (pick the app, enter a name, then open the link), `c` reconnect the selected account (offered only when it needs repair: failed, expired, revoked or inactive), `x` remove (asks to confirm), Tab show or hide retired accounts, Esc or `q` close. See [Multiple connector accounts](../user-guide/features/tool-gateway.md#multiple-connector-accounts). |
 | `/reload-skills` (alias: `/reload_skills`) | Re-scan `~/.hermes/skills/` for newly installed or removed skills |
 | `/reload` | Reload `.env` variables into the running session (picks up new API keys without restarting) |
-| `/plugins` | List installed plugins and their status |
+| `/plugins [update\|auto-update [on\|off]]` | List installed plugins and their status; `update` updates every plugin that has an update, `auto-update` shows or sets unattended plugin updates |
 | `/pet [list\|<slug>]` | Toggle or adopt a [petdex](../user-guide/features/pets.md) mascot. `/pet` toggles the pane, `/pet list` shows installed pets, `/pet <slug>` adopts a specific one. |
 | `/hatch <description>` (alias: `/generate-pet`) | Generate a brand-new petdex pet from a text description, using the configured image backend (OpenRouter / Nous Portal). See [Pets](../user-guide/features/pets.md). |
 
