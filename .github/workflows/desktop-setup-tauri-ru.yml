@@ -75,9 +75,11 @@ jobs:
           echo "✓ Node $NODE_MAJOR OK"
 
       - name: Install bootstrap-installer deps
-        # The JS workspaces install with pnpm from one root pnpm-lock.yaml (npm is refused).
+        # The JS workspaces install with pnpm from one root pnpm-lock.yaml (npm is refused), at the
+        # version pm/lock.json pins: the root preinstall refuses any other.
         run: |
-          npx -y pnpm@12.15.0 install --frozen-lockfile --filter "{./apps/bootstrap-installer}..."
+          PNPM_VERSION=$(node -p "require('./pm/lock.json').packages.pnpm.version")
+          npx -y "pnpm@$PNPM_VERSION" install --frozen-lockfile --filter "{./apps/bootstrap-installer}..."
 
       - name: Build frontend
         run: |
