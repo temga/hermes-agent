@@ -68,8 +68,8 @@ jobs:
           node --version
           npm --version
           NODE_MAJOR=$(node -e "console.log(process.versions.node.split('.')[0])")
-          if [ "$NODE_MAJOR" -lt 20 ]; then
-            echo "::error::Node 20+ required, got $(node --version)"
+          if [ "$NODE_MAJOR" -lt 26 ]; then
+            echo "::error::Node 26+ required (package.json engines), got $(node --version)"
             exit 1
           fi
           echo "✓ Node $NODE_MAJOR OK"
