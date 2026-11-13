@@ -75,7 +75,7 @@ def _load_hermes_index() -> Optional[dict]:
     for accept_encoding in ("gzip, deflate", "identity"):
         try:
             resp = hub()._skills_hub_http_get(
-                url, timeout=15, follow_redirects=True,
+                url, timeout=15,
                 headers={"Accept-Encoding": accept_encoding},
             )
             if resp.status_code != 200:
