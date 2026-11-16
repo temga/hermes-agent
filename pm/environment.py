@@ -438,7 +438,37 @@ class PythonEnvironment:
             fallback = [arg for arg in command if arg != "--compile-bytecode"]
             result = self._run(fallback, cwd=source, timeout=timeout)
         if result.returncode:
+            # Bifrost edition: PyPI's CDN can be unreachable from the networks this fork serves.
+            result = self._retry_from_wheel_mirror(result, command, source, timeout)
+        if result.returncode:
             raise classify_uv_failure("sync", result.returncode, result.stderr or result.stdout)
+
+    def _retry_from_wheel_mirror(self, failed: subprocess.CompletedProcess, command: list[str],
+                                 source: Path, timeout: int) -> subprocess.CompletedProcess:
+        """Rerun a sync that failed on the network against the fork's wheel mirror (pm.wheel_mirror).
+
+        The lock is rewritten in place for the one retry and restored afterwards; its hashes are
+        untouched, so uv rejects any wheel the mirror serves with different bytes.
+        """
+        from pm.wheel_mirror import is_network_failure, mirrored_lock
+
+        if not is_network_failure(f"{failed.stderr or ''}\n{failed.stdout or ''}"):
+            return failed
+        lock = source / "uv.lock"
+        try:
+            original = lock.read_bytes()
+        except OSError:
+            return failed
+        rewritten = mirrored_lock(original.decode("utf-8")).encode("utf-8")
+        if rewritten == original:
+            return failed
+        if self.output is not None:
+            self.output.write("Downloading packages failed; retrying from the Hermes wheel mirror.\n")
+        lock.write_bytes(rewritten)
+        try:
+            return self._run(command, cwd=source, timeout=timeout)
+        finally:
+            lock.write_bytes(original)
 
     def export_requirements(self, source: Path, out: Path, *, extras: Sequence[str] = (),
                             timeout: int = 1800) -> None:
