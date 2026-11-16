@@ -86,11 +86,13 @@ $script:UvPinVersion = "0.13.5"
 $script:UvPinFiles = @{
     "win32-x64" = @{
         Url    = "https://github.com/astral-sh/uv/releases/download/0.13.5/uv-x86_64-pc-windows-msvc.zip"
+        ForkMirrorUrl = "https://github.com/temga/hermes-agent/releases/download/pm-mirror/a38b8d1902b7cfbc76b423ba1bb456f623f42064cdc72628b6075b89afd1019a"
         MirrorUrl = "https://hermes-assets.nousresearch.com/upstream/sha256/a38b8d1902b7cfbc76b423ba1bb456f623f42064cdc72628b6075b89afd1019a"
         Sha256 = "a38b8d1902b7cfbc76b423ba1bb456f623f42064cdc72628b6075b89afd1019a"
     }
     "win32-arm64" = @{
         Url    = "https://github.com/astral-sh/uv/releases/download/0.13.5/uv-aarch64-pc-windows-msvc.zip"
+        ForkMirrorUrl = "https://github.com/temga/hermes-agent/releases/download/pm-mirror/09f47edf90726084a70f9426f6e3ca4f46e9bf7cbf23b1716ec64d60b055fae3"
         MirrorUrl = "https://hermes-assets.nousresearch.com/upstream/sha256/09f47edf90726084a70f9426f6e3ca4f46e9bf7cbf23b1716ec64d60b055fae3"
         Sha256 = "09f47edf90726084a70f9426f6e3ca4f46e9bf7cbf23b1716ec64d60b055fae3"
     }
@@ -100,11 +102,13 @@ $script:GitPinVersion = "2.53.0+3"
 $script:GitPinFiles = @{
     "win32-x64" = @{
         Url    = "https://github.com/git-for-windows/git/releases/download/v2.53.0.windows.3/PortableGit-2.53.0.3-64-bit.7z.exe"
+        ForkMirrorUrl = "https://github.com/temga/hermes-agent/releases/download/pm-mirror/b365da794b1d2225eb24d5f5e09ef7792cfd5fa26c3a3586210280c80dff3a2a"
         MirrorUrl = "https://hermes-assets.nousresearch.com/upstream/sha256/b365da794b1d2225eb24d5f5e09ef7792cfd5fa26c3a3586210280c80dff3a2a"
         Sha256 = "b365da794b1d2225eb24d5f5e09ef7792cfd5fa26c3a3586210280c80dff3a2a"
     }
     "win32-arm64" = @{
         Url    = "https://github.com/git-for-windows/git/releases/download/v2.53.0.windows.3/PortableGit-2.53.0.3-arm64.7z.exe"
+        ForkMirrorUrl = "https://github.com/temga/hermes-agent/releases/download/pm-mirror/0db54010054c01f35501cf69e1e32d3710138ecb934d188bd77093afed24300e"
         MirrorUrl = "https://hermes-assets.nousresearch.com/upstream/sha256/0db54010054c01f35501cf69e1e32d3710138ecb934d188bd77093afed24300e"
         Sha256 = "0db54010054c01f35501cf69e1e32d3710138ecb934d188bd77093afed24300e"
     }
@@ -449,9 +453,15 @@ function Invoke-VerifiedDownload {
         [Parameter(Mandatory = $true)][string]$Url,
         [Parameter(Mandatory = $true)][string]$Sha256,
         [Parameter(Mandatory = $true)][string]$OutFile,
-        [string]$MirrorUrl = ""
+        [string]$MirrorUrl = "",
+        [string]$ForkMirrorUrl = ""
     )
-    $urls = @($Url)
+    # Bifrost edition: the fork's own copy first. github.com/astral-sh answers anonymous
+    # clients behind a shared NAT with 429 and the Nous mirror's Cloudflare refuses Russian
+    # networks; a digest the fork release lacks is a quick 404 that falls through.
+    $urls = @()
+    if ($ForkMirrorUrl) { $urls += $ForkMirrorUrl }
+    $urls += $Url
     if ($MirrorUrl -and $MirrorUrl -ne $Url) { $urls += $MirrorUrl }
     $httpFailure = ""
     foreach ($candidate in $urls) {
@@ -587,7 +597,7 @@ function Get-Uv {
     try {
         New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
         $zipPath = Join-Path $tmpDir "uv.zip"
-        Invoke-VerifiedDownload -Url $pin.Url -MirrorUrl $pin.MirrorUrl -Sha256 $pin.Sha256 -OutFile $zipPath
+        Invoke-VerifiedDownload -Url $pin.Url -ForkMirrorUrl $pin.ForkMirrorUrl -MirrorUrl $pin.MirrorUrl -Sha256 $pin.Sha256 -OutFile $zipPath
         $extractDir = Join-Path $tmpDir "unpacked"
         Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
         # The zip carries uv.exe (+ uvx.exe) at the root or under one
@@ -620,7 +630,7 @@ function Get-PinnedGit {
     try {
         New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
         $sfxPath = Join-Path $tmpDir "portable-git.7z.exe"
-        Invoke-VerifiedDownload -Url $pin.Url -MirrorUrl $pin.MirrorUrl -Sha256 $pin.Sha256 -OutFile $sfxPath
+        Invoke-VerifiedDownload -Url $pin.Url -ForkMirrorUrl $pin.ForkMirrorUrl -MirrorUrl $pin.MirrorUrl -Sha256 $pin.Sha256 -OutFile $sfxPath
         $extractDir = Join-Path $tmpDir "unpacked"
         New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
         # PortableGit's self-extracting 7z carries its own extractor: stock

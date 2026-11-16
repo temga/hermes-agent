@@ -132,7 +132,7 @@ ensure_uv
 
 @pytest.mark.platforms("windows")
 def test_generated_windows_pins_match_the_shared_authority(tmp_path):
-    from pm.artifact_mirror import mirror_url
+    from pm.artifact_mirror import fork_mirror_url, mirror_url
     script = tmp_path / "pins.ps1"
     script.write_text(
         f". '{ROOT / 'scripts/install.ps1'}' -HermesHome '{tmp_path / 'home'}'\n"
@@ -147,7 +147,8 @@ def test_generated_windows_pins_match_the_shared_authority(tmp_path):
         assert targets
         for target, pin in targets.items():
             authority = lock[name]["artifacts"][target]
-            assert (pin["Url"], pin["Sha256"], pin["MirrorUrl"]) == (authority["url"], authority["sha256"], mirror_url(authority["sha256"]))
+            assert (pin["Url"], pin["Sha256"], pin["MirrorUrl"], pin["ForkMirrorUrl"]) == (
+                authority["url"], authority["sha256"], mirror_url(authority["sha256"]), fork_mirror_url(authority["sha256"]))
 
 
 @pytest.mark.platforms("posix")
@@ -169,3 +170,23 @@ def test_dev_setup_reaches_the_same_mirror_without_python(tmp_path, server):
     result = subprocess.run(["bash", str(repo / "setup-hermes.sh")], cwd=repo, env=env, text=True, capture_output=True, timeout=60, check=False)
     assert result.returncode == 73, result.stdout + result.stderr  # stop at the bootstrap interpreter boundary
     assert http.requests == ["/missing.tar.gz", "/archive/" + digest]
+
+
+@pytest.mark.platforms("posix")
+@pytest.mark.parametrize("fork_has_it", [True, False])
+def test_posix_uv_download_asks_the_fork_mirror_first(tmp_path, server, fork_has_it):
+    body = uv_archive()
+    primary, mirror, digest = fixture_bytes(server, "primary", body)
+    http, base = server
+    if fork_has_it:
+        http.files["/fork"] = body
+    script = f"""
+source '{ROOT / 'scripts/install.sh'}'
+command() {{ if [ "$*" = '-v uv' ]; then return 1; fi; builtin command "$@"; }}
+uv_bootstrap_pin() {{ UV_PIN_VERSION=fixture; UV_PIN_FORK_MIRROR='{base}/fork'; UV_PIN_URL='{primary}'; UV_PIN_MIRROR='{mirror}'; UV_PIN_SHA256='{digest}'; }}
+ensure_uv
+"""
+    env = {**os.environ, "HERMES_HOME": str(tmp_path / "home"), "HOME": str(tmp_path / "home"), "HERMES_RUNTIME_DIR": str(tmp_path / "tools")}
+    result = subprocess.run(["bash", "-c", script], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=60, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert http.requests == (["/fork"] if fork_has_it else ["/fork", "/primary"])
