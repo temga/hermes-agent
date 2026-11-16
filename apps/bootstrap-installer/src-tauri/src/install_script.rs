@@ -96,7 +96,24 @@ pub async fn resolve(
         }
     }
 
-    // 2. (Not implemented) bundled fallback.
+    // 2. Bundled copy: a commit-pinned build embeds that commit's scripts, so
+    //    the common install never touches raw.githubusercontent.com (anonymous
+    //    429s behind shared NATs). Skipped when the pin was overridden.
+    if let (Some(commit), Some(bytes)) = (&pin.commit, bundled_bytes(kind, pin.commit.as_deref())) {
+        let dest = download_path(kind, commit);
+        write_cached_script(kind, bytes, &dest).await?;
+        emit_log(&format!(
+            "[bootstrap] using {} bundled with the installer ({})",
+            kind.filename(),
+            truncate_ref(commit)
+        ));
+        return Ok(ResolvedScript {
+            path: dest,
+            source: ScriptSource::Bundled,
+            commit: pin.commit.clone(),
+            branch: pin.branch.clone(),
+        });
+    }
 
     // 3. Network. Pin must be a real commit or a branch ref.
     //
@@ -124,7 +141,7 @@ pub async fn resolve(
         kind.filename(),
         truncate_ref(&commit_or_ref)
     ));
-    download(kind, &commit_or_ref, &dest).await?;
+    download(kind, &commit_or_ref, &dest, emit_log).await?;
     emit_log(&format!("[bootstrap] downloaded to {}", dest.display()));
     Ok(ResolvedScript {
         path: dest,
@@ -198,25 +215,145 @@ pub(crate) fn prepare_cached_script_bytes(kind: ScriptKind, bytes: &[u8]) -> Vec
     }
 }
 
-/// Downloads to `dest_path` via reqwest with rustls. Atomically renames
-/// `dest_path.tmp` → `dest_path` so a partial write is never executed.
+const BUNDLED_PS1: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/bundled-install.ps1"));
+const BUNDLED_SH: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/bundled-install.sh"));
+
+/// The script embedded at build time, if `commit` is exactly the commit it was
+/// taken from.
+fn bundled_bytes(kind: ScriptKind, commit: Option<&str>) -> Option<&'static [u8]> {
+    let baked = option_env!("BUNDLED_SCRIPT_COMMIT")?;
+    if !commit?.eq_ignore_ascii_case(baked) {
+        return None;
+    }
+    let bytes = match kind {
+        ScriptKind::Ps1 => BUNDLED_PS1,
+        ScriptKind::Sh => BUNDLED_SH,
+    };
+    (!bytes.is_empty()).then_some(bytes)
+}
+
+/// Mirrors that serve the same bytes for a commit. raw.githubusercontent.com
+/// rate-limits anonymous clients per IP (HTTP 429), and one shared NAT or VPN
+/// exit is enough to exhaust it, so a second CDN answers when it does. jsDelivr
+/// is only useful for an immutable commit; a branch would be served stale.
+fn script_urls(kind: ScriptKind, commit_or_ref: &str) -> Vec<String> {
+    let name = kind.filename();
+    let mut urls = vec![format!(
+        "https://raw.githubusercontent.com/temga/hermes-agent/{commit_or_ref}/scripts/{name}"
+    )];
+    if is_valid_commit(commit_or_ref) {
+        urls.push(format!(
+            "https://cdn.jsdelivr.net/gh/temga/hermes-agent@{commit_or_ref}/scripts/{name}"
+        ));
+    }
+    urls
+}
+
+const ATTEMPTS_PER_URL: u32 = 3;
+const MAX_RETRY_AFTER_SECS: u64 = 15;
+
+/// Seconds to wait before attempt `attempt` (1-based) is retried: the server's
+/// `Retry-After` when it sent one, else 1s, 2s, ...; capped so a hostile or
+/// hour-long value never freezes the installer.
+fn backoff_secs(retry_after: Option<&str>, attempt: u32) -> u64 {
+    retry_after
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .unwrap_or(1u64 << (attempt - 1).min(4))
+        .min(MAX_RETRY_AFTER_SECS)
+}
+
+fn is_retryable(status: reqwest::StatusCode) -> bool {
+    status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.is_server_error()
+}
+
+fn friendly_failure(kind: ScriptKind, errors: &[String]) -> anyhow::Error {
+    let rate_limited = errors.iter().any(|e| e.contains("429"));
+    let hint = if rate_limited {
+        "GitHub temporarily limits requests from this network address. \
+         Wait a minute and press Retry, or switch network / VPN."
+    } else {
+        "Check the internet connection (GitHub must be reachable) and press Retry."
+    };
+    anyhow!(
+        "Failed to download {}. {hint}\n{}",
+        kind.filename(),
+        errors.join("\n")
+    )
+}
+
+/// Downloads to `dest_path` via reqwest with rustls, trying each mirror in
+/// turn and retrying 429/5xx/network errors with backoff.
 ///
 /// Explicit timeouts: this runs on every bootstrap, and a black-holed
 /// connection (captive portal, hung proxy) would otherwise hang forever
 /// instead of failing so the user can Retry.
-async fn download(kind: ScriptKind, commit_or_ref: &str, dest_path: &Path) -> Result<()> {
-    let url = format!(
-        "https://raw.githubusercontent.com/temga/hermes-agent/{}/scripts/{}",
-        commit_or_ref,
-        kind.filename()
-    );
+async fn download(
+    kind: ScriptKind,
+    commit_or_ref: &str,
+    dest_path: &Path,
+    emit_log: &impl Fn(&str),
+) -> Result<()> {
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .context("building download client")?;
 
+    let mut errors = Vec::new();
+    for url in script_urls(kind, commit_or_ref) {
+        for attempt in 1..=ATTEMPTS_PER_URL {
+            let mut retry_after = None;
+            let failure = match client
+                .get(&url)
+                .header("User-Agent", "hermes-setup/0.0.1")
+                .send()
+                .await
+            {
+                Ok(resp) if resp.status().is_success() => match resp.bytes().await {
+                    Ok(bytes) => {
+                        return write_cached_script(kind, &bytes, dest_path).await;
+                    }
+                    Err(e) => format!("reading body of {url}: {e}"),
+                },
+                Ok(resp) => {
+                    let status = resp.status();
+                    retry_after = resp
+                        .headers()
+                        .get(reqwest::header::RETRY_AFTER)
+                        .and_then(|v| v.to_str().ok())
+                        .map(str::to_owned);
+                    let msg = format!("HTTP {status} from {url}");
+                    if !is_retryable(status) {
+                        errors.push(msg);
+                        break;
+                    }
+                    msg
+                }
+                Err(e) => format!("GET {url}: {e}"),
+            };
+            emit_log(&format!("[bootstrap] {failure} (attempt {attempt}/{ATTEMPTS_PER_URL})"));
+            if attempt == ATTEMPTS_PER_URL {
+                errors.push(failure);
+            } else {
+                tokio::time::sleep(std::time::Duration::from_secs(backoff_secs(
+                    retry_after.as_deref(),
+                    attempt,
+                )))
+                .await;
+            }
+        }
+    }
+    Err(friendly_failure(kind, &errors))
+}
+
+/// Writes the script to `dest_path` via `dest_path.tmp` + rename so a partial
+/// write is never executed.
+async fn write_cached_script(kind: ScriptKind, bytes: &[u8], dest_path: &Path) -> Result<()> {
     if let Some(parent) = dest_path.parent() {
         std::fs::create_dir_all(parent).with_context(|| {
             format!("creating bootstrap-cache parent dir {}", parent.display())
         })?;
     }
-
     let tmp_path = dest_path.with_extension({
         let ext = dest_path
             .extension()
@@ -224,32 +361,7 @@ async fn download(kind: ScriptKind, commit_or_ref: &str, dest_path: &Path) -> Re
             .unwrap_or("tmp");
         format!("{ext}.tmp")
     });
-
-    let response = reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .timeout(std::time::Duration::from_secs(60))
-        .build()
-        .context("building download client")?
-        .get(&url)
-        .header("User-Agent", "hermes-setup/0.0.1")
-        .send()
-        .await
-        .with_context(|| format!("GET {url}"))?;
-
-    if !response.status().is_success() {
-        return Err(anyhow!(
-            "Failed to download {}: HTTP {} from {}",
-            kind.filename(),
-            response.status(),
-            url
-        ));
-    }
-
-    let bytes = response
-        .bytes()
-        .await
-        .with_context(|| format!("reading body of {url}"))?;
-    let bytes = prepare_cached_script_bytes(kind, &bytes);
+    let bytes = prepare_cached_script_bytes(kind, bytes);
 
     let mut file = tokio::fs::File::create(&tmp_path)
         .await
@@ -263,13 +375,8 @@ async fn download(kind: ScriptKind, commit_or_ref: &str, dest_path: &Path) -> Re
     tokio::fs::rename(&tmp_path, dest_path)
         .await
         .with_context(|| {
-            format!(
-                "renaming {} → {}",
-                tmp_path.display(),
-                dest_path.display()
-            )
+            format!("renaming {} → {}", tmp_path.display(), dest_path.display())
         })?;
-
     Ok(())
 }
 
@@ -314,6 +421,31 @@ mod tests {
         let out = prepare_cached_script_bytes(ScriptKind::Sh, b"#!/usr/bin/env bash\n");
         assert!(!out.starts_with(UTF8_BOM));
         assert_eq!(out, b"#!/usr/bin/env bash\n");
+    }
+
+    #[test]
+    fn jsdelivr_mirror_only_for_immutable_commits() {
+        let sha = "d13a83e42d43b8de14b7c73a5dadae8dd8d2c738";
+        let urls = script_urls(ScriptKind::Ps1, sha);
+        assert_eq!(urls.len(), 2);
+        assert!(urls[0].starts_with("https://raw.githubusercontent.com/temga/"));
+        assert!(urls[1].contains(&format!("hermes-agent@{sha}/scripts/install.ps1")));
+        assert_eq!(script_urls(ScriptKind::Sh, "main").len(), 1);
+    }
+
+    #[test]
+    fn backoff_honours_retry_after_but_is_capped() {
+        assert_eq!(backoff_secs(Some("5"), 1), 5);
+        assert_eq!(backoff_secs(Some("3600"), 1), MAX_RETRY_AFTER_SECS);
+        assert_eq!(backoff_secs(None, 1), 1);
+        assert_eq!(backoff_secs(None, 2), 2);
+        assert_eq!(backoff_secs(Some("Wed, 21 Oct 2026 07:28:00 GMT"), 3), 4);
+    }
+
+    #[test]
+    fn rate_limit_failure_tells_the_user_what_to_do() {
+        let e = friendly_failure(ScriptKind::Ps1, &["HTTP 429 Too Many Requests from x".into()]);
+        assert!(e.to_string().contains("Wait a minute"));
     }
 
     #[test]
