@@ -12,6 +12,12 @@ on:
         description: 'Git ref to build (branch/tag/sha)'
         required: false
         default: ''
+      pin_branch:
+        # A pre-release check builds bifrost-next pinned to bifrost-next: install.sh refuses a pinned
+        # commit that is not on the pinned branch, and a release commit reaches main only afterwards.
+        description: 'Branch the installer installs and pins updates to (release builds: main)'
+        required: false
+        default: 'main'
       platform:
         description: 'Which platform to build'
         type: choice
@@ -124,7 +130,7 @@ jobs:
         env:
           TAURI_ENV_PLATFORM: darwin
           HERMES_BUILD_PIN_COMMIT: ${{ github.sha }}
-          HERMES_BUILD_PIN_BRANCH: main
+          HERMES_BUILD_PIN_BRANCH: ${{ inputs.pin_branch || 'main' }}
           # Code signing — Apple Developer ID Application certificate (base64 .p12).
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -255,7 +261,7 @@ jobs:
         env:
           TAURI_ENV_PLATFORM: windows
           HERMES_BUILD_PIN_COMMIT: ${{ github.sha }}
-          HERMES_BUILD_PIN_BRANCH: main
+          HERMES_BUILD_PIN_BRANCH: ${{ inputs.pin_branch || 'main' }}
 
       - name: Find and rename NSIS installer
         id: find_exe
