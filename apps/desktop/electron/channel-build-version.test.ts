@@ -377,6 +377,7 @@ test('actual MSIX manifest writer consumes the channel quad across rollover inst
       'apps/desktop/update-feed.cjs',
       'apps/desktop/assets/msix-manifest.xml',
       'apps/desktop/scripts/before-build.mjs',
+      'apps/desktop/scripts/edition-bundle-version.cjs',
       'apps/desktop/scripts/mac-icon.cjs',
       'apps/desktop/scripts/mac-sign.mjs',
       'apps/desktop/scripts/mac-sign-cache.mjs',

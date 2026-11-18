@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # build-installer.sh — CI-adapted version of build-installer.command
 # Creates a styled DMG from Hermes.zip with custom icon + background.
 #

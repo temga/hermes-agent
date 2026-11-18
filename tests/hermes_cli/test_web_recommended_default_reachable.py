@@ -13,9 +13,9 @@ CURATED = ["vendor/unreachable", "vendor/second", "vendor/third"]
 
 @pytest.fixture()
 def recommend(monkeypatch):
-    import hermes_cli.inventory as inventory
+    from hermes_cli import inventory
     import hermes_cli.models as models_mod
-    import hermes_cli.runtime_provider as runtime_provider
+    from hermes_cli import runtime_provider
     from hermes_cli.web_routers.models import get_recommended_default_model
 
     def call(*, listed, current_model="", current_provider="gw"):
