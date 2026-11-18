@@ -77,9 +77,14 @@ jobs:
       - name: Install bootstrap-installer deps
         # The JS workspaces install with pnpm from one root pnpm-lock.yaml (npm is refused), at the
         # version pm/lock.json pins: the root preinstall refuses any other.
+        # Tauri's beforeBuildCommand runs `pnpm run build`, so the pinned pnpm also goes on PATH for the
+        # later steps, from a runner-temp prefix (the self-hosted runner's global tools stay untouched).
         run: |
           PNPM_VERSION=$(node -p "require('./pm/lock.json').packages.pnpm.version")
-          npx -y "pnpm@$PNPM_VERSION" install --frozen-lockfile --filter "{./apps/bootstrap-installer}..."
+          PNPM_DIR="$RUNNER_TEMP/pnpm-$PNPM_VERSION"
+          npm install --prefix "$PNPM_DIR" --no-save --no-package-lock --no-audit --no-fund "pnpm@$PNPM_VERSION"
+          echo "$PNPM_DIR/node_modules/.bin" >> "$GITHUB_PATH"
+          "$PNPM_DIR/node_modules/.bin/pnpm" install --frozen-lockfile --filter "{./apps/bootstrap-installer}..."
 
       - name: Build frontend
         run: |
