@@ -190,3 +190,33 @@ ensure_uv
     result = subprocess.run(["bash", "-c", script], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=60, check=False)
     assert result.returncode == 0, result.stdout + result.stderr
     assert http.requests == (["/fork"] if fork_has_it else ["/fork", "/primary"])
+
+
+@pytest.mark.platforms("posix")
+@pytest.mark.parametrize("mirror_up", [True, False])
+def test_posix_clone_falls_back_to_the_git_mirror_and_keeps_origin(tmp_path, mirror_up):
+    git = lambda *args, cwd=tmp_path: subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()  # noqa: E731
+    source = tmp_path / "source"
+    git("init", "-q", "-b", "main", str(source))
+    (source / "f.txt").write_text("hello", encoding="utf-8")
+    git("-c", "user.email=a@b", "-c", "user.name=a", "add", "-A", cwd=source)
+    git("-c", "user.email=a@b", "-c", "user.name=a", "commit", "-qm", "init", cwd=source)
+    head = git("rev-parse", "HEAD", cwd=source)
+    dead = f"file://{tmp_path / 'github-is-down'}"
+    mirror = f"file://{source}" if mirror_up else f"file://{tmp_path / 'mirror-is-down'}"
+    script = f"""
+source '{ROOT / 'scripts/install.sh'}'
+REPO_URL='{dead}'; MIRROR_REPO_URL='{mirror}'
+sleep() {{ :; }}
+INSTALL_DIR='{tmp_path / 'install'}'
+stage_repository
+"""
+    env = {**os.environ, "HERMES_HOME": str(tmp_path / "home"), "HOME": str(tmp_path / "home")}
+    result = subprocess.run(["bash", "-c", script], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=120, check=False)
+    if not mirror_up:
+        assert result.returncode != 0 and "git clone failed" in result.stdout + result.stderr
+        return
+    assert result.returncode == 0, result.stdout + result.stderr
+    install = tmp_path / "install"
+    assert git("rev-parse", "HEAD", cwd=install) == head and (install / "f.txt").read_text(encoding="utf-8") == "hello"
+    assert git("remote", "get-url", "origin", cwd=install) == dead

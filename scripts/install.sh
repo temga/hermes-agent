@@ -22,6 +22,11 @@ export UV_NO_CONFIG=1
 
 # Bifrost edition: installs from the temga fork (the Bifrost build lives on its main branch).
 REPO_URL="${HERMES_REPO_URL:-https://github.com/temga/hermes-agent.git}"
+# Bifrost edition: GitVerse copy of the fork (CI pushes every branch and tag there), cloned from
+# when github.com does not answer. Only for the default source; an explicit HERMES_REPO_URL is the
+# user's own. After the clone origin is pointed back at REPO_URL, so updates never see the mirror.
+MIRROR_REPO_URL=""
+[ -n "${HERMES_REPO_URL:-}" ] || MIRROR_REPO_URL="https://gitverse.ru/temga1502/hermes-agent.git"
 BRANCH="main"
 INSTALL_COMMIT=""
 # The update channel to install: stable (the latest published release, the default for the
@@ -908,7 +913,7 @@ stage_repository() {
             fi
         fi
         mkdir -p "$(dirname "$INSTALL_DIR")"
-        local staged attempt label cloned=false progress=() materialize=(reset --hard HEAD) no_checkout=""
+        local staged attempt label clone_url cloned=false cloned_from="$REPO_URL" progress=() materialize=(reset --hard HEAD) no_checkout=""
         release="$(stable_target "$REPO_URL")"
         [ "$release" != - ] || stable_unreachable "could not look up the latest stable release"
         [ -z "$INSTALL_COMMIT$release" ] || no_checkout=--no-checkout
@@ -923,17 +928,23 @@ stage_repository() {
             # still resolve), file contents fetched on demand. Not treeless:
             # a long-lived treeless checkout re-downloads whole trees on every
             # checkout and history walk (#129712).
-            label="Cloning $REPO_URL ($BRANCH) into $INSTALL_DIR"
+            # The second attempt asks the mirror: a host that failed once is not asked twice in a row.
+            clone_url="$REPO_URL"
+            [ "$attempt" != 2 ] || [ -z "$MIRROR_REPO_URL" ] || clone_url="$MIRROR_REPO_URL"
+            label="Cloning $clone_url ($BRANCH) into $INSTALL_DIR"
             [ "$attempt" = 1 ] || label="$label (attempt $attempt of 3)"
             # A pinned install materializes only the pin (below): checking out the
             # branch tip first fetches and rewrites every file the two differ in.
             if run_logged "$label" git clone ${progress[@]+"${progress[@]}"} \
-                --filter=blob:none ${no_checkout:+"$no_checkout"} --branch "$BRANCH" "$REPO_URL" "$staged/tree"; then
+                --filter=blob:none ${no_checkout:+"$no_checkout"} --branch "$BRANCH" "$clone_url" "$staged/tree"; then
                 cloned=true
+                cloned_from="$clone_url"
                 break
             fi
             rm -rf "$staged/tree"
-            [ "$attempt" = 3 ] || sleep "$((attempt * 5))"
+            [ "$clone_url" = "$REPO_URL" ] || log_warn "the mirror did not answer either"
+            # No pause before the mirror; pause only before asking github.com again.
+            [ "$attempt" = 3 ] || { [ "$attempt" = 1 ] && [ -n "$MIRROR_REPO_URL" ]; } || sleep "$((attempt * 5))"
         done
         if [ "$cloned" = false ]; then
             # The checkout step is where throttled downloads die: clone the
@@ -976,6 +987,12 @@ stage_repository() {
                 rm -rf "$staged"
                 fail "could not check out ${INSTALL_COMMIT:-the cloned tree}; no checkout published$(native_detail)" git_checkout_failed
             fi
+        fi
+        if [ "$cloned_from" != "$REPO_URL" ]; then
+            # Files are checked out, so anything still missing is fetched lazily from the real origin.
+            log_warn "cloned from the mirror $cloned_from; origin stays $REPO_URL"
+            git -C "$staged/tree" remote set-url origin "$REPO_URL" \
+                || { rm -rf "$staged"; fail "cannot point origin at $REPO_URL" git_clone_failed; }
         fi
         if ! mv "$staged/tree" "$INSTALL_DIR"; then
             rm -rf "$staged"

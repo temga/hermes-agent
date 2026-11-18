@@ -78,6 +78,10 @@ $script:BoundParams = $PSBoundParameters
 $script:BinDirOnCallerPath = $null
 # Bifrost edition: installs from the temga fork (the Bifrost build lives on its main branch).
 $RepoUrl = if ($env:HERMES_REPO_URL) { $env:HERMES_REPO_URL } else { "https://github.com/temga/hermes-agent.git" }
+# Bifrost edition: GitVerse copy of the fork (CI pushes every branch and tag there), cloned from when
+# github.com does not answer. Only for the default source; an explicit HERMES_REPO_URL is the user's own.
+# After the clone origin is pointed back at $RepoUrl, so updates never see the mirror.
+$MirrorRepoUrl = if ($env:HERMES_REPO_URL) { "" } else { "https://gitverse.ru/temga1502/hermes-agent.git" }
 
 # --- BEGIN GENERATED: bootstrap pins (scripts/gen-bootstrap-pins.py) ---
 # Derived from pm/lock.json. DO NOT EDIT BY HAND:
@@ -1245,18 +1249,23 @@ function Stage-Repository {
         try {
             $cloned = $false
             $deferred = $false
+            $clonedFrom = $RepoUrl
             foreach ($attempt in 1..3) {
+                # The second attempt asks the mirror: a host that failed once is not asked twice in a row.
+                $cloneUrl = if ($attempt -eq 2 -and $MirrorRepoUrl) { $MirrorRepoUrl } else { $RepoUrl }
                 # Blobless: every commit, tree and release tag (runtime identity is
                 # the nearest reachable release; -Commit pins and branch switches
                 # still resolve), file contents fetched on demand. Not treeless:
                 # a long-lived treeless checkout re-downloads whole trees on every
                 # checkout and history walk (#129712).
-                $cloneLabel = "Cloning $RepoUrl ($Branch) into $InstallDir"
+                $cloneLabel = "Cloning $cloneUrl ($Branch) into $InstallDir"
                 if ($attempt -gt 1) { $cloneLabel += " (attempt $attempt of 3)" }
-                Invoke-Logged $cloneLabel { git clone @progress @longPaths --filter=blob:none @checkout --branch $Branch $RepoUrl $tree }
-                if (-not $LASTEXITCODE) { $cloned = $true; break }
+                Invoke-Logged $cloneLabel { git clone @progress @longPaths --filter=blob:none @checkout --branch $Branch $cloneUrl $tree }
+                if (-not $LASTEXITCODE) { $cloned = $true; $clonedFrom = $cloneUrl; break }
                 Remove-Item -LiteralPath $tree -Recurse -Force -ErrorAction SilentlyContinue
-                if ($attempt -lt 3) { Start-Sleep -Seconds ($attempt * 5) }
+                if ($cloneUrl -ne $RepoUrl) { Write-Warn "the mirror did not answer either" }
+                # No pause before the mirror; pause only before asking github.com again.
+                if ($attempt -eq 2 -or ($attempt -eq 1 -and -not $MirrorRepoUrl)) { Start-Sleep -Seconds ($attempt * 5) }
             }
             if (-not $cloned) {
                 # The checkout step is where throttled downloads die: clone the
@@ -1292,6 +1301,12 @@ function Stage-Repository {
                     Fail "could not check out $what; no checkout published$(Get-NativeDetail)" git_checkout_failed
                 }
                 $pinned = [bool]$Commit
+            }
+            if ($clonedFrom -ne $RepoUrl) {
+                # Files are checked out, so anything still missing is fetched lazily from the real origin.
+                Write-Warn "cloned from the mirror $clonedFrom; origin stays $RepoUrl"
+                Invoke-Native { git -C $tree remote set-url origin $RepoUrl }
+                if ($LASTEXITCODE) { Fail "cannot point origin at $RepoUrl$(Get-NativeDetail)" git_clone_failed }
             }
             Move-Item -LiteralPath $tree -Destination $InstallDir
             Disable-TreelessGraphWrites $InstallDir
