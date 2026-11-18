@@ -20,25 +20,45 @@ import os
 from providers import register_provider
 from providers.base import ProviderProfile
 
-from ._keyresolver import resolve_bifrost_key, resolve_bifrost_base_url
+from ._keyresolver import _CANONICAL_ENV, _DEFAULT_BASE_URL_V1, _custom_key_names, _env
 
-# Seed BIFROST_API_KEY from config.yaml providers section so the core key
-# resolver (which reads env_vars from the profile) finds the key even when the
-# user added Bifrost as a custom provider with a different env-var name (e.g.
-# HERMES_CUSTOM_ROVE_API_KEY).  This runs at import time, before the agent init
-# reads the profile's env_vars.  Never while multiplexing: os.environ is shared
-# by every served profile, and there is no profile scope to resolve against at
-# import.  The base URL is never seeded: every Bifrost plugin resolves it
-# itself, so importing this module leaves a keyless environment untouched.
+
+# Provider discovery imports this module and must read no config (upstream b4d8e4c332: a config
+# backend that refuses reads raises SystemExit and would take the whole provider catalog down).
+# So the import looks only at the environment and .env; the config.yaml ``providers:`` lookup in
+# _keyresolver stays with the sibling Bifrost plugins, which run it at call time.
+def _env_only_key() -> str:
+    """BIFROST_API_KEY, else the first ``HERMES_CUSTOM_*_API_KEY`` holding an sk-bf-* key."""
+    key = _env(_CANONICAL_ENV)
+    if key:
+        return key
+    for name in sorted(_custom_key_names()):
+        value = _env(name)
+        if value.startswith("sk-bf-"):
+            return value
+    return ""
+
+
+def _env_only_base_url() -> str:
+    """BIFROST_BASE_URL (with /v1 appended when missing), else the default gateway."""
+    url = _env("BIFROST_BASE_URL").rstrip("/")
+    if not url:
+        return _DEFAULT_BASE_URL_V1
+    return url if url.endswith("/v1") else url + "/v1"
+
+
+# Seed BIFROST_API_KEY so the core key resolver (which reads the profile's env_vars) finds a key
+# the user saved under a custom-provider name (e.g. HERMES_CUSTOM_ROVE_API_KEY). Never while
+# multiplexing: os.environ is shared by every served profile, and there is no profile scope to
+# resolve against at import. The base URL is never seeded.
 from agent.secret_scope import is_multiplex_active
 
-if not is_multiplex_active() and not os.environ.get("BIFROST_API_KEY"):
-    _seeded = resolve_bifrost_key()
+if not is_multiplex_active() and not os.environ.get(_CANONICAL_ENV):
+    _seeded = _env_only_key()
     if _seeded:
-        os.environ["BIFROST_API_KEY"] = _seeded
+        os.environ[_CANONICAL_ENV] = _seeded
 
-# env → config.yaml providers → https://router.rove-ai.ru/v1
-_DEFAULT_BASE_URL = resolve_bifrost_base_url()
+_DEFAULT_BASE_URL = _env_only_base_url()
 
 # Curated model list, in preference order — the full catalog is dynamic (24+
 # models across 4 upstream providers) and each sk-bf-* key reaches only part of
@@ -77,7 +97,8 @@ bifrost = ProviderProfile(
     ),
     signup_url="https://router.rove-ai.ru",
     # Resolved at import time; the profile dataclass stores a static string,
-    # so a changed BIFROST_BASE_URL or config entry takes effect next session.
+    # so a changed BIFROST_BASE_URL takes effect next session. A regional gateway
+    # for this provider goes in BIFROST_BASE_URL or model.base_url.
     base_url=_DEFAULT_BASE_URL,
     fallback_models=_FALLBACK_MODELS,
     # Non-reasoning model for background/aux text tasks (compression, session
