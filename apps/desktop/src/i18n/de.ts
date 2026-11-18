@@ -2616,13 +2616,8 @@ export const deOverrides = {
       openLog: 'Log öffnen',
       actionLog: 'Aktionsprotokoll',
       alreadyInstalled: (name: string) => `"${name}" ist bereits installiert`,
-      pickerTitle: 'Skills Hub',
-      pickerBrowse: 'Den ganzen Hub durchstöbern',
-      pickerHide: 'Hub-Durchsucher ausblenden',
       pickerBlocked:
         'Der Skill-Hub ist nicht erreichbar. Mögliche Ursachen sind Netzwerkbeschränkungen oder CDN-Geoblocking. Tragen Sie in config.yaml unter „skills.hub_url“ einen Spiegel ein.',
-      pickerHint:
-        'Klicken Sie bei einem beliebigen Skill auf „+ Zu diesem Agenten hinzufügen“ – er wird installiert und erscheint in der Liste oben.',
       loadFailed: 'Skill-Hub konnte nicht geladen werden',
       previewFailed: 'Skill-Vorschau fehlgeschlagen',
       scanFailed: 'Sicherheitsscan fehlgeschlagen',

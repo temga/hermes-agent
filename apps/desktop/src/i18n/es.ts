@@ -2607,12 +2607,8 @@ export const esOverrides = {
       openLog: 'Abrir registro',
       actionLog: 'Registro de acciones',
       alreadyInstalled: (name: string) => `"${name}" ya está instalada`,
-      pickerTitle: 'Skills Hub',
-      pickerBrowse: 'Explorar todo el hub',
-      pickerHide: 'Ocultar el explorador del hub',
       pickerBlocked:
         'No se pudo acceder al hub de skills. Puede deberse a restricciones de red o a bloqueo geográfico de la CDN. Configura un espejo en «skills.hub_url» de config.yaml.',
-      pickerHint: 'Pulsa "+ Añadir a este agente" en cualquier skill: se instala y aparece en la lista de arriba.',
       loadFailed: 'No se pudo cargar el hub de skills',
       previewFailed: 'No se pudo cargar la vista previa de la skill',
       scanFailed: 'Falló el análisis de seguridad',
