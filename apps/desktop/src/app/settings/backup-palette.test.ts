@@ -13,10 +13,9 @@ afterEach(() => {
 })
 
 describe('Backup & Transfer entry points', () => {
-  it('lists exactly one ⌘K row per task', () => {
+  it('offers only the backup row in the Bifrost edition, which has no Hermes Cloud transfer', () => {
     expect(backupPaletteEntries(en).map(entry => [entry.id, entry.label])).toEqual([
-      ['backup-agent', 'Back up this agent'],
-      ['transfer-to-cloud', 'Transfer to Hermes Cloud']
+      ['backup-agent', 'Back up this agent']
     ])
   })
 

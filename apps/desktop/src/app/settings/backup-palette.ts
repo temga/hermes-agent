@@ -1,5 +1,5 @@
 import type { Translations } from '@/i18n'
-import { servedByHermesCloud } from '@/lib/hermes-cloud-host'
+import { transferAvailable } from '@/lib/hermes-cloud-agents'
 import { Archive, CloudUpload, type IconComponent } from '@/lib/icons'
 
 export const BACKUP_SETTINGS_HREF = '/settings?tab=backup'
@@ -34,7 +34,7 @@ export function backupPaletteEntries(t: Translations): BackupPaletteEntry[] {
       keywords: ['backup', 'export', 'archive', 'save', 'download', 'settings'],
       label: copy.backupCommand
     },
-    ...(servedByHermesCloud()
+    ...(!transferAvailable()
       ? []
       : [
           {

@@ -8,7 +8,6 @@
 import { hermesApiAs } from '@/api/client'
 import type { DesktopCloudAgent, DesktopCloudDiscoverResult, DesktopCloudStatus } from '@/global'
 import { runBackup, type TransferEndpoint, type TransferRequestFn } from '@/lib/agent-transfer'
-import { servedByHermesCloud } from '@/lib/hermes-cloud-host'
 
 export const PORTAL_AGENTS_URL = 'https://portal.nousresearch.com/agents'
 
@@ -33,7 +32,9 @@ function bridge() {
 
 /** Transfer is offered everywhere except a Webapp Hermes Cloud itself serves: that tab IS a cloud
  *  agent. */
-export const transferAvailable = (): boolean => !servedByHermesCloud()
+// Bifrost edition: no transfer to Hermes Cloud. It needs a Nous sign-in and uploads the agent to
+// Nous; the edition keeps backup only, as a Webapp Hermes Cloud serves does.
+export const transferAvailable = (): boolean => false
 
 /** `hermes backup` of the whole Hermes home on `owner`, then a save of the archive. */
 export async function backup(owner: TransferEndpoint, onLine?: (line: string) => void): Promise<BackupResult> {
