@@ -22,6 +22,11 @@ export UV_NO_CONFIG=1
 
 # Bifrost edition: installs from the temga fork (the Bifrost build lives on its main branch).
 REPO_URL="${HERMES_REPO_URL:-https://github.com/temga/hermes-agent.git}"
+# Bifrost edition: GitVerse copy of the fork (CI pushes every branch and tag there), cloned from
+# when github.com does not answer. Only for the default source; an explicit HERMES_REPO_URL is the
+# user's own. After the clone origin is pointed back at REPO_URL, so updates never see the mirror.
+MIRROR_REPO_URL=""
+[ -n "${HERMES_REPO_URL:-}" ] || MIRROR_REPO_URL="https://gitverse.ru/temga1502/hermes-agent.git"
 BRANCH="main"
 INSTALL_COMMIT=""
 # The update channel to install: stable (the latest published release, the default for the
@@ -278,36 +283,43 @@ uv_bootstrap_pin() {
     case "$1" in
         linux-x64)
             UV_PIN_URL="https://github.com/astral-sh/uv/releases/download/0.13.5/uv-x86_64-unknown-linux-gnu.tar.gz"
+            UV_PIN_FORK_MIRROR="https://github.com/temga/hermes-agent/releases/download/pm-mirror/f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
             UV_PIN_MIRROR="https://hermes-assets.nousresearch.com/upstream/sha256/f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
             UV_PIN_SHA256="f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
             ;;
         linux-arm64)
             UV_PIN_URL="https://github.com/astral-sh/uv/releases/download/0.13.5/uv-aarch64-unknown-linux-gnu.tar.gz"
+            UV_PIN_FORK_MIRROR="https://github.com/temga/hermes-agent/releases/download/pm-mirror/4bb69cf95ed13f23713bb7bc09f241896ea0c75b7c557e615a20604b82f9c403"
             UV_PIN_MIRROR="https://hermes-assets.nousresearch.com/upstream/sha256/4bb69cf95ed13f23713bb7bc09f241896ea0c75b7c557e615a20604b82f9c403"
             UV_PIN_SHA256="4bb69cf95ed13f23713bb7bc09f241896ea0c75b7c557e615a20604b82f9c403"
             ;;
         linux-x64-musl)
             UV_PIN_URL="https://github.com/astral-sh/uv/releases/download/0.13.5/uv-x86_64-unknown-linux-musl.tar.gz"
+            UV_PIN_FORK_MIRROR="https://github.com/temga/hermes-agent/releases/download/pm-mirror/57ef9d9ccb01fb1bd998df995b0dd221b52f7d7841fbea93f2d4463bf61fb7a9"
             UV_PIN_MIRROR="https://hermes-assets.nousresearch.com/upstream/sha256/57ef9d9ccb01fb1bd998df995b0dd221b52f7d7841fbea93f2d4463bf61fb7a9"
             UV_PIN_SHA256="57ef9d9ccb01fb1bd998df995b0dd221b52f7d7841fbea93f2d4463bf61fb7a9"
             ;;
         linux-arm64-musl)
             UV_PIN_URL="https://github.com/astral-sh/uv/releases/download/0.13.5/uv-aarch64-unknown-linux-musl.tar.gz"
+            UV_PIN_FORK_MIRROR="https://github.com/temga/hermes-agent/releases/download/pm-mirror/7906c79adb21c81abd559841ba76bb1d9af9d791acac7a041b2972e03ae16538"
             UV_PIN_MIRROR="https://hermes-assets.nousresearch.com/upstream/sha256/7906c79adb21c81abd559841ba76bb1d9af9d791acac7a041b2972e03ae16538"
             UV_PIN_SHA256="7906c79adb21c81abd559841ba76bb1d9af9d791acac7a041b2972e03ae16538"
             ;;
         darwin-x64)
             UV_PIN_URL="https://github.com/astral-sh/uv/releases/download/0.13.5/uv-x86_64-apple-darwin.tar.gz"
+            UV_PIN_FORK_MIRROR="https://github.com/temga/hermes-agent/releases/download/pm-mirror/b0f52b0e3945b4107d89024ea38e625683011fbfc05a0d98f9fa2d6dcee28c66"
             UV_PIN_MIRROR="https://hermes-assets.nousresearch.com/upstream/sha256/b0f52b0e3945b4107d89024ea38e625683011fbfc05a0d98f9fa2d6dcee28c66"
             UV_PIN_SHA256="b0f52b0e3945b4107d89024ea38e625683011fbfc05a0d98f9fa2d6dcee28c66"
             ;;
         darwin-arm64)
             UV_PIN_URL="https://github.com/astral-sh/uv/releases/download/0.13.5/uv-aarch64-apple-darwin.tar.gz"
+            UV_PIN_FORK_MIRROR="https://github.com/temga/hermes-agent/releases/download/pm-mirror/743f85035a1996ecb350659e01cd9faea9709829be09b1b4b03c73eaf3c9cd73"
             UV_PIN_MIRROR="https://hermes-assets.nousresearch.com/upstream/sha256/743f85035a1996ecb350659e01cd9faea9709829be09b1b4b03c73eaf3c9cd73"
             UV_PIN_SHA256="743f85035a1996ecb350659e01cd9faea9709829be09b1b4b03c73eaf3c9cd73"
             ;;
         *)
             UV_PIN_URL=""
+            UV_PIN_FORK_MIRROR=""
             UV_PIN_SHA256=""
             return 1
             ;;
@@ -383,22 +395,26 @@ ensure_uv() {
         # no-tmp: ok — last-resort fallback when mktemp itself is missing
         _tmp="$(mktemp -d 2>/dev/null || echo "/tmp/hermes-uv-bootstrap.$$")"
         mkdir -p "$_tmp"
-        local _fetched_from="$UV_PIN_URL"
-        # Only network availability failures permit trying identical mirrored bytes.
-        if curl -LsSf "$UV_PIN_URL" -o "$_tmp/uv.tar.gz"; then
-            :
-        else
-            local _curl_status=$?
+        # Bifrost edition: the fork's copy first (github.com/astral-sh rate-limits shared NATs and
+        # the Nous mirror refuses Russian networks). Only network availability failures permit
+        # trying identical mirrored bytes; the digest below guards every host.
+        local _fetched_from="" _candidate _curl_status
+        for _candidate in "${UV_PIN_FORK_MIRROR:-}" "$UV_PIN_URL" "${UV_PIN_MIRROR:-}"; do
+            [ -n "$_candidate" ] || continue
+            if curl -LsSf "$_candidate" -o "$_tmp/uv.tar.gz"; then
+                _fetched_from="$_candidate"
+                break
+            else
+                _curl_status=$?
+            fi
             case "$_curl_status" in
                 5|6|7|18|22|28|52|55|56) ;;
-                *) rm -rf "$_tmp"; fail "failed to download pinned uv from $UV_PIN_URL (curl $_curl_status)" download_failed ;;
+                *) rm -rf "$_tmp"; fail "failed to download pinned uv from $_candidate (curl $_curl_status)" download_failed ;;
             esac
-            if [ -n "${UV_PIN_MIRROR:-}" ] && curl -LsSf "$UV_PIN_MIRROR" -o "$_tmp/uv.tar.gz"; then
-                _fetched_from="$UV_PIN_MIRROR"
-            else
-                rm -rf "$_tmp"
-                fail "failed to download pinned uv from $UV_PIN_URL or ${UV_PIN_MIRROR:-no mirror}" download_failed
-            fi
+        done
+        if [ -z "$_fetched_from" ]; then
+            rm -rf "$_tmp"
+            fail "failed to download pinned uv from ${UV_PIN_FORK_MIRROR:+$UV_PIN_FORK_MIRROR, }$UV_PIN_URL or ${UV_PIN_MIRROR:-no mirror}" download_failed
         fi
         local _digest
         if command -v sha256sum >/dev/null 2>&1; then
@@ -914,7 +930,7 @@ stage_repository() {
             fi
         fi
         mkdir -p "$(dirname "$INSTALL_DIR")"
-        local staged attempt label cloned=false progress=() materialize=(reset --hard HEAD) no_checkout=""
+        local staged attempt label clone_url cloned=false cloned_from="$REPO_URL" progress=() materialize=(reset --hard HEAD) no_checkout=""
         release="$(stable_target "$REPO_URL")"
         [ "$release" != - ] || stable_unreachable "could not look up the latest stable release"
         [ -z "$INSTALL_COMMIT$release" ] || no_checkout=--no-checkout
@@ -929,17 +945,23 @@ stage_repository() {
             # still resolve), file contents fetched on demand. Not treeless:
             # a long-lived treeless checkout re-downloads whole trees on every
             # checkout and history walk (#129712).
-            label="Cloning $REPO_URL ($BRANCH) into $INSTALL_DIR"
+            # The second attempt asks the mirror: a host that failed once is not asked twice in a row.
+            clone_url="$REPO_URL"
+            [ "$attempt" != 2 ] || [ -z "$MIRROR_REPO_URL" ] || clone_url="$MIRROR_REPO_URL"
+            label="Cloning $clone_url ($BRANCH) into $INSTALL_DIR"
             [ "$attempt" = 1 ] || label="$label (attempt $attempt of 3)"
             # A pinned install materializes only the pin (below): checking out the
             # branch tip first fetches and rewrites every file the two differ in.
             if run_logged "$label" git clone ${progress[@]+"${progress[@]}"} \
-                --filter=blob:none ${no_checkout:+"$no_checkout"} --branch "$BRANCH" "$REPO_URL" "$staged/tree"; then
+                --filter=blob:none ${no_checkout:+"$no_checkout"} --branch "$BRANCH" "$clone_url" "$staged/tree"; then
                 cloned=true
+                cloned_from="$clone_url"
                 break
             fi
             rm -rf "$staged/tree"
-            [ "$attempt" = 3 ] || sleep "$((attempt * 5))"
+            [ "$clone_url" = "$REPO_URL" ] || log_warn "the mirror did not answer either"
+            # No pause before the mirror; pause only before asking github.com again.
+            [ "$attempt" = 3 ] || { [ "$attempt" = 1 ] && [ -n "$MIRROR_REPO_URL" ]; } || sleep "$((attempt * 5))"
         done
         if [ "$cloned" = false ]; then
             # The checkout step is where throttled downloads die: clone the
@@ -982,6 +1004,12 @@ stage_repository() {
                 rm -rf "$staged"
                 fail "could not check out ${INSTALL_COMMIT:-the cloned tree}; no checkout published$(native_detail)" git_checkout_failed
             fi
+        fi
+        if [ "$cloned_from" != "$REPO_URL" ]; then
+            # Files are checked out, so anything still missing is fetched lazily from the real origin.
+            log_warn "cloned from the mirror $cloned_from; origin stays $REPO_URL"
+            git -C "$staged/tree" remote set-url origin "$REPO_URL" \
+                || { rm -rf "$staged"; fail "cannot point origin at $REPO_URL" git_clone_failed; }
         fi
         if ! mv "$staged/tree" "$INSTALL_DIR"; then
             rm -rf "$staged"

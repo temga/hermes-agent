@@ -1,0 +1,58 @@
+name: Mirror to GitVerse
+
+# Bifrost edition: installers clone from github.com/temga/hermes-agent and fall back to this copy
+# (scripts/install.sh, scripts/install.ps1: MIRROR_REPO_URL) when GitHub does not answer. It must hold
+# every commit an installer can pin and every release tag, so each push of main (and its alias
+# bifrost-edition), of bifrost-next, and each v* tag is pushed here. Never forced: a diverged mirror
+# fails the job instead of being overwritten. Needs the GITVERSE_TOKEN secret (write access to the repo).
+# Refs created by GITHUB_TOKEN push no events, so bifrost-edition, which bifrost-edition-mirror.yml
+# fast-forwards on GitHub, is pushed here from main's commit directly.
+
+on:
+  push:
+    branches: [main, bifrost-next]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bifrost-gitverse-mirror
+  cancel-in-progress: false
+
+env:
+  GITVERSE_URL: https://gitverse.ru/temga1502/hermes-agent.git
+  GITVERSE_USER: temga1502
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Push to GitVerse
+        run: |
+          set -euo pipefail
+          if [ -z "$GITVERSE_TOKEN" ]; then
+            echo "::error::the GITVERSE_TOKEN secret is not set; the GitVerse mirror is stale"
+            exit 1
+          fi
+          auth="$(printf '%s:%s' "$GITVERSE_USER" "$GITVERSE_TOKEN" | base64 | tr -d '\n')"
+          echo "::add-mask::$auth"
+          push() { git -c "http.extraheader=Authorization: Basic $auth" push "$GITVERSE_URL" "$@"; }
+          case "$GITHUB_REF" in
+            refs/heads/main)
+              push "$GITHUB_SHA:refs/heads/main" "$GITHUB_SHA:refs/heads/bifrost-edition" ;;
+            refs/heads/*)
+              push "$GITHUB_SHA:$GITHUB_REF" ;;
+            refs/tags/*)
+              push "$GITHUB_REF:$GITHUB_REF" ;;
+            *)
+              push "origin/main:refs/heads/main" "origin/main:refs/heads/bifrost-edition" ;;
+          esac
+        env:
+          GITVERSE_TOKEN: ${{ secrets.GITVERSE_TOKEN }}

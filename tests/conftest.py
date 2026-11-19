@@ -1534,6 +1534,16 @@ def public_dns(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_live_fork_pm_mirror(request, monkeypatch):
+    # Bifrost edition: every pinned PM download tries the fork's GitHub mirror first, so a test
+    # serving a lock URL from loopback would reach github.com before its own server. An
+    # unresolvable host fails over at once, exactly like a network that cannot reach it.
+    if request.node.get_closest_marker("live"):
+        return
+    monkeypatch.setattr("pm.artifact_mirror.FORK_MIRROR_PREFIX", "https://pm-fork-mirror.invalid/")
+
+
+@pytest.fixture(autouse=True)
 def _isolate_computer_use_approval_state():
     """Reset the computer-use explicit approval callback after every test.
 

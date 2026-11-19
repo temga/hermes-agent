@@ -78,6 +78,10 @@ $script:BoundParams = $PSBoundParameters
 $script:BinDirOnCallerPath = $null
 # Bifrost edition: installs from the temga fork (the Bifrost build lives on its main branch).
 $RepoUrl = if ($env:HERMES_REPO_URL) { $env:HERMES_REPO_URL } else { "https://github.com/temga/hermes-agent.git" }
+# Bifrost edition: GitVerse copy of the fork (CI pushes every branch and tag there), cloned from when
+# github.com does not answer. Only for the default source; an explicit HERMES_REPO_URL is the user's own.
+# After the clone origin is pointed back at $RepoUrl, so updates never see the mirror.
+$MirrorRepoUrl = if ($env:HERMES_REPO_URL) { "" } else { "https://gitverse.ru/temga1502/hermes-agent.git" }
 
 # --- BEGIN GENERATED: bootstrap pins (scripts/gen-bootstrap-pins.py) ---
 # Derived from pm/lock.json. DO NOT EDIT BY HAND:
@@ -86,11 +90,13 @@ $script:UvPinVersion = "0.13.5"
 $script:UvPinFiles = @{
     "win32-x64" = @{
         Url    = "https://github.com/astral-sh/uv/releases/download/0.13.5/uv-x86_64-pc-windows-msvc.zip"
+        ForkMirrorUrl = "https://github.com/temga/hermes-agent/releases/download/pm-mirror/a38b8d1902b7cfbc76b423ba1bb456f623f42064cdc72628b6075b89afd1019a"
         MirrorUrl = "https://hermes-assets.nousresearch.com/upstream/sha256/a38b8d1902b7cfbc76b423ba1bb456f623f42064cdc72628b6075b89afd1019a"
         Sha256 = "a38b8d1902b7cfbc76b423ba1bb456f623f42064cdc72628b6075b89afd1019a"
     }
     "win32-arm64" = @{
         Url    = "https://github.com/astral-sh/uv/releases/download/0.13.5/uv-aarch64-pc-windows-msvc.zip"
+        ForkMirrorUrl = "https://github.com/temga/hermes-agent/releases/download/pm-mirror/09f47edf90726084a70f9426f6e3ca4f46e9bf7cbf23b1716ec64d60b055fae3"
         MirrorUrl = "https://hermes-assets.nousresearch.com/upstream/sha256/09f47edf90726084a70f9426f6e3ca4f46e9bf7cbf23b1716ec64d60b055fae3"
         Sha256 = "09f47edf90726084a70f9426f6e3ca4f46e9bf7cbf23b1716ec64d60b055fae3"
     }
@@ -100,11 +106,13 @@ $script:GitPinVersion = "2.56.1+1"
 $script:GitPinFiles = @{
     "win32-x64" = @{
         Url    = "https://github.com/git-for-windows/git/releases/download/v2.56.1.windows.1/PortableGit-2.56.1-64-bit.7z.exe"
+        ForkMirrorUrl = "https://github.com/temga/hermes-agent/releases/download/pm-mirror/9dd04a608ceb5f6ab32a73709e0ecb159d211da71b697c45ff81f6dd0c6b49c7"
         MirrorUrl = "https://hermes-assets.nousresearch.com/upstream/sha256/9dd04a608ceb5f6ab32a73709e0ecb159d211da71b697c45ff81f6dd0c6b49c7"
         Sha256 = "9dd04a608ceb5f6ab32a73709e0ecb159d211da71b697c45ff81f6dd0c6b49c7"
     }
     "win32-arm64" = @{
         Url    = "https://github.com/git-for-windows/git/releases/download/v2.56.1.windows.1/PortableGit-2.56.1-arm64.7z.exe"
+        ForkMirrorUrl = "https://github.com/temga/hermes-agent/releases/download/pm-mirror/0dca0d9f760924a7e6752235d7dd6eb1a9b508ee714b6ed15d89252e5a58c5c9"
         MirrorUrl = "https://hermes-assets.nousresearch.com/upstream/sha256/0dca0d9f760924a7e6752235d7dd6eb1a9b508ee714b6ed15d89252e5a58c5c9"
         Sha256 = "0dca0d9f760924a7e6752235d7dd6eb1a9b508ee714b6ed15d89252e5a58c5c9"
     }
@@ -449,9 +457,15 @@ function Invoke-VerifiedDownload {
         [Parameter(Mandatory = $true)][string]$Url,
         [Parameter(Mandatory = $true)][string]$Sha256,
         [Parameter(Mandatory = $true)][string]$OutFile,
-        [string]$MirrorUrl = ""
+        [string]$MirrorUrl = "",
+        [string]$ForkMirrorUrl = ""
     )
-    $urls = @($Url)
+    # Bifrost edition: the fork's own copy first. github.com/astral-sh answers anonymous
+    # clients behind a shared NAT with 429 and the Nous mirror's Cloudflare refuses Russian
+    # networks; a digest the fork release lacks is a quick 404 that falls through.
+    $urls = @()
+    if ($ForkMirrorUrl) { $urls += $ForkMirrorUrl }
+    $urls += $Url
     if ($MirrorUrl -and $MirrorUrl -ne $Url) { $urls += $MirrorUrl }
     $httpFailure = ""
     foreach ($candidate in $urls) {
@@ -587,7 +601,7 @@ function Get-Uv {
     try {
         New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
         $zipPath = Join-Path $tmpDir "uv.zip"
-        Invoke-VerifiedDownload -Url $pin.Url -MirrorUrl $pin.MirrorUrl -Sha256 $pin.Sha256 -OutFile $zipPath
+        Invoke-VerifiedDownload -Url $pin.Url -ForkMirrorUrl $pin.ForkMirrorUrl -MirrorUrl $pin.MirrorUrl -Sha256 $pin.Sha256 -OutFile $zipPath
         $extractDir = Join-Path $tmpDir "unpacked"
         Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
         # The zip carries uv.exe (+ uvx.exe) at the root or under one
@@ -678,7 +692,7 @@ function Get-PinnedGit {
     try {
         New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
         $sfxPath = Join-Path $tmpDir "portable-git.7z.exe"
-        Invoke-VerifiedDownload -Url $pin.Url -MirrorUrl $pin.MirrorUrl -Sha256 $pin.Sha256 -OutFile $sfxPath
+        Invoke-VerifiedDownload -Url $pin.Url -ForkMirrorUrl $pin.ForkMirrorUrl -MirrorUrl $pin.MirrorUrl -Sha256 $pin.Sha256 -OutFile $sfxPath
         New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
         # PortableGit's self-extracting 7z carries its own extractor: stock
         # Windows 10 tar.exe has no bzip2 ("unable to run program bzip2 -d").
@@ -1338,18 +1352,23 @@ function Stage-Repository {
         try {
             $cloned = $false
             $deferred = $false
+            $clonedFrom = $RepoUrl
             foreach ($attempt in 1..3) {
+                # The second attempt asks the mirror: a host that failed once is not asked twice in a row.
+                $cloneUrl = if ($attempt -eq 2 -and $MirrorRepoUrl) { $MirrorRepoUrl } else { $RepoUrl }
                 # Blobless: every commit, tree and release tag (runtime identity is
                 # the nearest reachable release; -Commit pins and branch switches
                 # still resolve), file contents fetched on demand. Not treeless:
                 # a long-lived treeless checkout re-downloads whole trees on every
                 # checkout and history walk (#129712).
-                $cloneLabel = "Cloning $RepoUrl ($Branch) into $InstallDir"
+                $cloneLabel = "Cloning $cloneUrl ($Branch) into $InstallDir"
                 if ($attempt -gt 1) { $cloneLabel += " (attempt $attempt of 3)" }
-                Invoke-Logged $cloneLabel { git clone @progress @longPaths --filter=blob:none @checkout --branch $Branch $RepoUrl $tree }
-                if (-not $LASTEXITCODE) { $cloned = $true; break }
+                Invoke-Logged $cloneLabel { git clone @progress @longPaths --filter=blob:none @checkout --branch $Branch $cloneUrl $tree }
+                if (-not $LASTEXITCODE) { $cloned = $true; $clonedFrom = $cloneUrl; break }
                 Remove-Item -LiteralPath $tree -Recurse -Force -ErrorAction SilentlyContinue
-                if ($attempt -lt 3) { Start-Sleep -Seconds ($attempt * 5) }
+                if ($cloneUrl -ne $RepoUrl) { Write-Warn "the mirror did not answer either" }
+                # No pause before the mirror; pause only before asking github.com again.
+                if ($attempt -eq 2 -or ($attempt -eq 1 -and -not $MirrorRepoUrl)) { Start-Sleep -Seconds ($attempt * 5) }
             }
             if (-not $cloned) {
                 # The checkout step is where throttled downloads die: clone the
@@ -1385,6 +1404,12 @@ function Stage-Repository {
                     Fail "could not check out $what; no checkout published$(Get-NativeDetail)" git_checkout_failed
                 }
                 $pinned = [bool]$Commit
+            }
+            if ($clonedFrom -ne $RepoUrl) {
+                # Files are checked out, so anything still missing is fetched lazily from the real origin.
+                Write-Warn "cloned from the mirror $clonedFrom; origin stays $RepoUrl"
+                Invoke-Native { git -C $tree remote set-url origin $RepoUrl }
+                if ($LASTEXITCODE) { Fail "cannot point origin at $RepoUrl$(Get-NativeDetail)" git_clone_failed }
             }
             Move-Item -LiteralPath $tree -Destination $InstallDir
             Disable-TreelessGraphWrites $InstallDir
