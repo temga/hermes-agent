@@ -33,6 +33,7 @@ fn main() {
 
     let commit = resolve_commit_pin();
     let branch = resolve_branch_pin();
+    bundle_install_scripts(commit.as_deref());
 
     if let Some(c) = &commit {
         println!("cargo:rustc-env=BUILD_PIN_COMMIT={c}");
@@ -98,6 +99,39 @@ fn main() {
     let attrs = tauri_build::Attributes::new();
 
     tauri_build::try_build(attrs).expect("failed to run tauri-build");
+}
+
+/// Embeds the install scripts of the pinned commit so the installer does not
+/// depend on raw.githubusercontent.com (anonymous 429s behind shared NATs).
+/// Only a commit pin is immutable, so a branch-following build bundles nothing
+/// and downloads at install time. Empty files and no `BUNDLED_SCRIPT_COMMIT`
+/// mean "nothing bundled"; install_script.rs falls back to the network.
+fn bundle_install_scripts(commit: Option<&str>) {
+    let out_dir = std::path::PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR"));
+    let mut all_found = commit.is_some();
+    for name in ["install.ps1", "install.sh"] {
+        let bytes = commit
+            .and_then(|c| {
+                Command::new("git")
+                    .args(["show", &format!("{c}:scripts/{name}")])
+                    .output()
+                    .ok()
+            })
+            .filter(|o| o.status.success())
+            .map(|o| o.stdout);
+        all_found &= bytes.is_some();
+        std::fs::write(out_dir.join(format!("bundled-{name}")), bytes.unwrap_or_default())
+            .expect("write bundled install script");
+    }
+    match commit {
+        Some(c) if all_found => println!("cargo:rustc-env=BUNDLED_SCRIPT_COMMIT={c}"),
+        Some(c) => println!(
+            "cargo:warning=hermes-bootstrap: could not read scripts/install.* at {}; \
+             not bundling (installer will download them)",
+            short(c)
+        ),
+        None => {}
+    }
 }
 
 fn resolve_commit_pin() -> Option<String> {
