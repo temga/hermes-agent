@@ -12,6 +12,10 @@ on:
       - 'pm/lock.json'
       - 'pm/termux_runtime_libs.json'
       - 'pm/artifact_mirror.py'
+      - 'pm/wheel_mirror.py'
+      - 'uv.lock'
+      - 'pyproject.toml'
+      - 'scripts/bifrost/mirror_wheels.py'
       - 'scripts/bifrost/mirror_pm_inputs.py'
       - '.github/workflows/bifrost-pm-mirror.yml'
   workflow_dispatch:
@@ -26,7 +30,7 @@ concurrency:
 jobs:
   mirror:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v7.0.1
         with:
@@ -34,5 +38,13 @@ jobs:
       # Runner Python, like archive-inputs.yml: the script needs only PM's stdlib downloader.
       - name: Upload missing pinned inputs
         run: python3 scripts/bifrost/mirror_pm_inputs.py
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # PM retries a sync that failed on PyPI's CDN from the pip-mirror release (pm/wheel_mirror.py).
+      # uv is only used to list the default closure; the version is the one pm/lock.json pins.
+      - name: Sync the wheel mirror
+        run: |
+          python3 -m pip install uv==0.13.5
+          python3 scripts/bifrost/mirror_wheels.py
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
