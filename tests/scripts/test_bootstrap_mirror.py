@@ -195,7 +195,7 @@ ensure_uv
 @pytest.mark.platforms("posix")
 @pytest.mark.parametrize("mirror_up", [True, False])
 def test_posix_clone_falls_back_to_the_git_mirror_and_keeps_origin(tmp_path, mirror_up):
-    git = lambda *args, cwd=tmp_path: subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()  # noqa: E731
+    git = lambda *args, cwd=tmp_path: subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
     source = tmp_path / "source"
     git("init", "-q", "-b", "main", str(source))
     (source / "f.txt").write_text("hello", encoding="utf-8")

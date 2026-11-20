@@ -56,13 +56,13 @@ def closure() -> set[tuple[str, str]]:
     command = ["uv", "export", "--frozen", "--all-packages", "--no-emit-project", "--no-hashes", "--no-annotate",
                "--no-header", "--format", "requirements-txt", "--python", PYTHON, "--all-extras",
                *(arg for extra in opt_in_extras(REPO_ROOT) for arg in ("--no-extra", extra))]
-    out = subprocess.run(command, cwd=REPO_ROOT, capture_output=True, text=True, check=True).stdout
+    out = subprocess.run(command, cwd=REPO_ROOT, capture_output=True, text=True, encoding="utf-8", check=True).stdout
     return {(m[1].lower().replace("_", "-"), m[2]) for line in out.splitlines() if (m := re.match(r"([\w.\-]+)==(\S+?)\s*(;|$)", line))}
 
 
 def wanted_wheels() -> dict[str, tuple[str, str]]:
     """file name → (url, sha256) for every mirrored wheel of the closure."""
-    text = (REPO_ROOT / "uv.lock").read_text(encoding="utf-8")
+    text = (REPO_ROOT / "uv.lock").read_text(encoding="utf-8-sig")
     servable = mirrored_wheel_names(text)
     needed = closure()
     wheels = {}
