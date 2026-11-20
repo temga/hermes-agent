@@ -143,7 +143,8 @@ git rev-list --left-right --count upstream/main...HEAD
   `apps/desktop/src/app/settings/providers-settings.tsx`, `apps/desktop/electron/main.ts`;
 - `README.md`, `AGENTS.md`, `plugins/AGENTS.md` — ссылки на этот файл. Корневой `AGENTS.md`
   упирается в лимит цепочки 30k символов (`scripts/ci/check_agents_md_size.py`): если upstream
-  его вырастит, ссылку оставить, а длинный текст держать здесь.
+  его вырастит, ссылку оставить, а длинный текст держать здесь. Сейчас ради лимита из последней
+  строки корневого `AGENTS.md` убрано упоминание навыка `hermes-agent-dev` (в форк он не входит).
 
 Полный список: `git diff --stat $(git merge-base HEAD upstream/main) HEAD`.
 
