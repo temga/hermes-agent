@@ -344,8 +344,12 @@ function isMachO(file) {
 }
 
 function windowsSigning() {
+  // Bifrost edition: a local certificate thumbprint enables the same hook; the
+  // hook then signs only the MSIX package (see scripts/sign-msix.mjs).
   if (!process.env.AZURE_SIGN_ENDPOINT || !process.env.AZURE_CLIENT_ID) {
-    return {}
+    return process.env.HERMES_WIN_CERT_THUMBPRINT
+      ? { sign: { type: 'signtool', sign: './scripts/batch-sign-binaries.mjs', signingHashAlgorithms: ['sha256'] } }
+      : {}
   }
   return {
     sign: {

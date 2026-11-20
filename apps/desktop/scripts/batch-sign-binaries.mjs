@@ -421,6 +421,8 @@ export async function customSign(configuration, packager, deps = {}) {
   // The product exe was rcedit-ed after the batch ran, so it is signed here,
   // after its resources are final, on the same Azure manager sign-msix uses.
   const productName = packager.appInfo.productFilename
+  // Bifrost edition: with a local cert only the package is signed (no Azure for the exe).
+  if (process.env.HERMES_WIN_CERT_THUMBPRINT && !azureSigningConfigured()) return true
   if (base.toLowerCase() === `${productName.toLowerCase()}.exe` && isProductExe(file, packager)) {
     const { azureSignFile } = await import('./sign-msix.mjs')
     await (deps.azureSignFile ?? azureSignFile)(file, packager)

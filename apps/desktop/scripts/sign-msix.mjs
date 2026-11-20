@@ -21,6 +21,7 @@
 // (0x8007000B). Partner Center re-signs the package with the Microsoft
 // Store certificate on ingestion, so the Store- msix ships unsigned.
 
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
@@ -150,6 +151,27 @@ export async function azureSignFile(file, packager, dependencies = {}) {
   await mgr.signFile({ path: file, options: packager.platformOptions })
 }
 
+/** Bifrost edition: true when a local certificate (thumbprint) signs instead of Azure. */
+export function localSigningConfigured(env = process.env) {
+  return Boolean(env.HERMES_WIN_CERT_THUMBPRINT) && !(env.AZURE_SIGN_ENDPOINT && env.AZURE_CLIENT_ID)
+}
+
+/**
+ * Bifrost edition: sign the MSIX package with a certificate from the Windows
+ * store (CurrentUser\My of the build account), RFC3161-timestamped. The
+ * package signature is the only one Windows validates at install.
+ *
+ * @param {string} file
+ * @param {NodeJS.ProcessEnv} [env]
+ * @param {(cmd: string, args: string[]) => void} [run]
+ */
+export function localSignFile(file, env = process.env, run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit' })) {
+  run(env.HERMES_WIN_SIGNTOOL || 'signtool', [
+    'sign', '/fd', 'sha256', '/sha1', String(env.HERMES_WIN_CERT_THUMBPRINT),
+    '/tr', env.HERMES_WIN_TIMESTAMP_URL || 'http://timestamp.digicert.com', '/td', 'sha256', file
+  ])
+}
+
 /**
  * The electron-builder custom sign hook.
  *
@@ -167,5 +189,9 @@ export default async function sign(configuration, packager) {
     return
   }
 
+  if (localSigningConfigured()) {
+    localSignFile(configuration.path)
+    return
+  }
   await azureSignFile(configuration.path, packager)
 }
