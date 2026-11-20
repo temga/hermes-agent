@@ -1,0 +1,103 @@
+name: Build Hermes Desktop MSIX (Bifrost, bundled)
+
+# Bifrost edition: builds the upstream `bundled` Windows MSIX on the fork's own
+# Windows runner and signs the package with the fork's self-made certificate
+# (see apps/desktop/scripts/sign-msix.mjs). Manual only: it builds and uploads a
+# workflow artifact, it never tags, publishes a release or touches a feed.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref to build (branch/tag/sha)'
+        required: false
+        default: 'feat/bifrost-msix-signing'
+      cert_thumbprint:
+        description: 'SHA1 thumbprint of the signing certificate in the runner account CurrentUser\My'
+        required: false
+        default: '769FB3A112E5CC7425A8AC5367D28532AA303DDA'
+      publisher:
+        description: 'MSIX publisher: must equal the certificate subject exactly'
+        required: false
+        default: 'CN=Bifrost Edition'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-msix-bifrost
+  cancel-in-progress: false
+
+jobs:
+  build-windows:
+    runs-on: [self-hosted, Windows]
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: powershell
+    env:
+      HERMES_MSIX_PUBLISHER: ${{ inputs.publisher }}
+      HERMES_WIN_CERT_THUMBPRINT: ${{ inputs.cert_thumbprint }}
+      # Short path: a long checkout path breaks native builds on Windows (scripts/build-bundle.ps1).
+      BUILD_DIR: C:\hsb
+
+    steps:
+      - name: Check the signing certificate and signtool
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Thumbprint -eq $env:HERMES_WIN_CERT_THUMBPRINT }
+          if (-not $cert) { throw "Certificate $env:HERMES_WIN_CERT_THUMBPRINT not found in CurrentUser\My of $(whoami)" }
+          if (-not $cert.HasPrivateKey) { throw 'Certificate has no private key' }
+          if ($cert.Subject -ne $env:HERMES_MSIX_PUBLISHER) {
+            throw "Publisher '$env:HERMES_MSIX_PUBLISHER' does not match certificate subject '$($cert.Subject)'"
+          }
+          $signtool = Get-Command signtool -ErrorAction SilentlyContinue
+          if (-not $signtool) {
+            $sdk = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe' -ErrorAction SilentlyContinue |
+              Sort-Object FullName | Select-Object -Last 1
+            if (-not $sdk) { throw 'signtool not found: install the Windows 10/11 SDK' }
+            "HERMES_WIN_SIGNTOOL=$($sdk.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+            Write-Host "signtool: $($sdk.FullName)"
+          }
+          Write-Host "Signing as $($cert.Subject), runner account $(whoami)"
+
+      - name: Checkout (manual clone, short path)
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $Ref = '${{ inputs.ref }}' -replace '^refs/heads/', '' -replace '^refs/tags/', ''
+          if (Test-Path $env:BUILD_DIR) { Remove-Item -Recurse -Force $env:BUILD_DIR }
+          git clone --branch $Ref "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY.git" $env:BUILD_DIR
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Set-Location $env:BUILD_DIR
+          git log --oneline -1
+
+      - name: Build the bundled MSIX (signed with the local certificate)
+        working-directory: C:\hsb
+        run: |
+          # build-bundle.ps1 removes AZURE_SIGN_*; the HERMES_* signing variables above pass through.
+          # Not verified before the first run: whether the packaging environment keeps them.
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build-bundle.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify the package signature
+        working-directory: C:\hsb
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $msix = Get-ChildItem apps\desktop\release -Filter '*.msix' | Where-Object { $_.Name -notlike 'Store-*' }
+          if (-not $msix) { throw 'No sideload .msix was produced' }
+          foreach ($f in $msix) {
+            $sig = Get-AuthenticodeSignature $f.FullName
+            Write-Host "$($f.Name): $($sig.Status) signer=$($sig.SignerCertificate.Subject) thumbprint=$($sig.SignerCertificate.Thumbprint)"
+            if (-not $sig.SignerCertificate -or $sig.SignerCertificate.Thumbprint -ne $env:HERMES_WIN_CERT_THUMBPRINT) {
+              throw "$($f.Name) is not signed with the expected certificate"
+            }
+          }
+          # UnknownError/NotTrusted is expected on a machine without bifrost.cer in Trusted People.
+
+      - name: Upload the MSIX as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hermes-Bifrost-bundled-msix
+          path: C:\hsb\apps\desktop\release\*.msix
+          retention-days: 14
+          if-no-files-found: error
