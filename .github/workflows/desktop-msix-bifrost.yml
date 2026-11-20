@@ -6,6 +6,11 @@ name: Build Hermes Desktop MSIX (Bifrost, bundled)
 # workflow artifact, it never tags, publishes a release or touches a feed.
 
 on:
+  # Bifrost edition: a dispatch needs the file on the default branch, so the feature branch also
+  # builds on push until this workflow is released to bifrost-next.
+  push:
+    branches: [feat/bifrost-msix-signing]
+    paths: [.github/workflows/desktop-msix-bifrost.yml]
   workflow_dispatch:
     inputs:
       ref:
@@ -36,8 +41,8 @@ jobs:
       run:
         shell: powershell
     env:
-      HERMES_MSIX_PUBLISHER: ${{ inputs.publisher }}
-      HERMES_WIN_CERT_THUMBPRINT: ${{ inputs.cert_thumbprint }}
+      HERMES_MSIX_PUBLISHER: ${{ inputs.publisher || 'CN=Bifrost Edition' }}
+      HERMES_WIN_CERT_THUMBPRINT: ${{ inputs.cert_thumbprint || '769FB3A112E5CC7425A8AC5367D28532AA303DDA' }}
       # Short path: a long checkout path breaks native builds on Windows (scripts/build-bundle.ps1).
       BUILD_DIR: C:\hsb
 
@@ -64,7 +69,7 @@ jobs:
       - name: Checkout (manual clone, short path)
         run: |
           $ErrorActionPreference = 'Stop'
-          $Ref = '${{ inputs.ref }}' -replace '^refs/heads/', '' -replace '^refs/tags/', ''
+          $Ref = '${{ inputs.ref || github.ref_name }}' -replace '^refs/heads/', '' -replace '^refs/tags/', ''
           if (Test-Path $env:BUILD_DIR) { Remove-Item -Recurse -Force $env:BUILD_DIR }
           git clone --branch $Ref "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY.git" $env:BUILD_DIR
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
